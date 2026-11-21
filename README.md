@@ -96,6 +96,8 @@ still builds and runs with `-browser`.
   reload; unsaved changes raise a conflict banner instead of being lost.
 - Light/dark theme, resizable and collapsible sidebar, both remembered.
 - Databases: table, board and list views over a folder of pages (below).
+- **The same vault over MCP**, so an agent can search and edit your notes
+  (below): `not1 mcp -w ~/Notes`.
 
 ## Databases
 
@@ -148,6 +150,56 @@ Where the work lives.
 - **The `⋯` on a column header** (or right-click, or `alt`-click) renames the
   property, changes its type, or removes it.
 
+## Agents: the MCP server
+
+`not1 mcp -w ~/Notes` speaks the Model Context Protocol on stdin/stdout, so an
+agent — Claude Desktop, Claude Code, anything MCP-capable — can search, read and
+write the same vault you have open. Same files, same frontmatter, no second
+store: a tool call is a normal page write, and the app's file watcher picks it up
+in about a second.
+
+| Tool | What it's for |
+| --- | --- |
+| `vault_info` | vault path, page count, recently edited — the orienting call |
+| `search_pages` | FTS over titles and bodies, with `«highlighted»` snippets |
+| `list_pages` | flat listing, optionally confined to a folder |
+| `read_page` | frontmatter fields, body, backlinks, and `modTime` |
+| `create_page` | new page from a title (+ optional body, icon, folder) |
+| `append_to_page` | add markdown at the end — cannot overwrite |
+| `update_page` | replace body and/or title, icon, tags |
+| `delete_page` | move to `.not1/trash/` |
+| `query_database` | a database page as typed fields and rows |
+
+Two things keep agents honest, both borrowed from the app itself:
+
+- **`read_page` returns `modTime`, `update_page` accepts it.** Pass it back and a
+  write that would clobber a concurrent edit fails instead (the same
+  optimistic-concurrency rule the UI uses).
+- **Appending is the default way to add text.** `append_to_page` re-reads and
+  retries on contention, so "add this to my notes" can't eat the page.
+
+Delete never unlinks, paths are vault-relative (`Projects/Roadmap.md`), and the
+index is rebuilt on startup — the vault may have changed while nothing was
+watching it, and search should not lie.
+
+Point a client at it:
+
+```json
+{
+  "mcpServers": {
+    "not1": {
+      "command": "/Users/you/bin/not1",
+      "args": ["mcp", "-w", "/Users/you/Notes"]
+    }
+  }
+}
+```
+
+That is `~/Library/Application Support/Claude/claude_desktop_config.json` for
+Claude Desktop, `.mcp.json` in a project for Claude Code. `-w` falls back to the
+last workspace you opened in the app. stdout is the protocol channel, so
+diagnostics go to stderr; add `-log` to see what it's serving.
+
 ## Shortcuts
 
 | Key | Action |
@@ -167,14 +219,18 @@ internal/config         app settings (last workspace, theme) — never vault dat
 internal/vault          the filesystem: read/parse/write/move/delete + frontmatter
 internal/index          SQLite FTS5 index, backlinks, snippets (rebuildable)
 internal/server         HTTP API + SSE file watcher
+internal/mcpsrv         the same vault over MCP, for agents (not1 mcp)
 internal/app            native window (webview_go) and stub for CGO-less builds
 web/                    the UI: no framework, no build step, ES modules
 ```
 
 The API is small and local: bootstrap, tree, page read/write (with `expectMod`
 for conflicts), rename, move, delete, search, resolve, database read/view/cell
-writes, attachment copy/upload, bookmark title lookup, and an event stream.
-Every request carries a random per-run token, which is injected into the page.
+writes, attachment copy/upload, bookmark title lookup, export, and an event
+stream. Every request carries a random per-run token, which is injected into the
+page. The MCP server in `internal/mcpsrv` is a second door onto the same code:
+it opens the vault directly instead of going through HTTP, and is the only part
+of the program that expects a client other than the UI.
 
 ## Not in scope
 
