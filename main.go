@@ -23,6 +23,12 @@ import (
 //go:embed web
 var embedded embed.FS
 
+// version tracks the git tag without the leading v, so `git tag v0.1` and
+// `not1 -version` never disagree. Release builds can pin it:
+//
+//	go build -ldflags "-X main.version=0.2" -o not1 .
+var version = "0.1"
+
 func main() {
 	var (
 		workspace = flag.String("w", "", "folder to open (defaults to the last workspace)")
@@ -34,7 +40,7 @@ func main() {
 	flag.Parse()
 
 	if *showVer {
-		fmt.Println("not1 1.0.0")
+		fmt.Println("not1 " + version)
 		return
 	}
 
