@@ -299,20 +299,25 @@ function groupButton(db, ctx, repaint) {
   const b = document.createElement("button");
   b.className = "db-tool";
   b.innerHTML = `${icon("panel")}<span>Group: ${escapeHtml(db.groupBy || "none")}</span>`;
-  b.onclick = () => {
-    const items = [{ head: "Group by" }];
-    if (db.groupBy) items.push({ label: "No grouping", icon: "x", action: () => setView(db, ctx, { groupBy: "" }).then(repaint) });
-    for (const f of db.fields.filter((x) => x.type === SELECT || x.type === CHECKBOX)) {
-      items.push({
-        label: f.key,
-        hint: f.key === db.groupBy ? "✓" : "",
-        action: () => setView(db, ctx, { groupBy: f.key }).then(repaint),
-      });
-    }
-    if (items.length === 1) items.push({ label: "Add a select property first" });
-    popover(b, menuList(items));
-  };
+  b.onclick = () => openGroupMenu(db, ctx, repaint, b);
   return b;
+}
+
+/** The group-by menu, anchored to whatever was clicked: the toolbar button, or
+ *  the button the empty board offers. The anchor has to be the element on
+ *  screen — a popover positioned from a detached node lands in the corner. */
+function openGroupMenu(db, ctx, repaint, anchor) {
+  const items = [{ head: "Group by" }];
+  if (db.groupBy) items.push({ label: "No grouping", icon: "x", action: () => setView(db, ctx, { groupBy: "" }).then(repaint) });
+  for (const f of db.fields.filter((x) => x.type === SELECT || x.type === CHECKBOX)) {
+    items.push({
+      label: f.key,
+      hint: f.key === db.groupBy ? "✓" : "",
+      action: () => setView(db, ctx, { groupBy: f.key }).then(repaint),
+    });
+  }
+  if (items.length === 1) items.push({ label: "Add a select property first" });
+  popover(anchor, menuList(items));
 }
 
 function openSort(db, ctx, anchor, repaint) {
@@ -1168,7 +1173,7 @@ function board(db, ctx, repaint) {
     const b = document.createElement("button");
     b.className = "btn-ghost";
     b.innerHTML = "Choose a property";
-    b.onclick = () => groupButton(db, ctx, repaint).onclick();
+    b.onclick = () => openGroupMenu(db, ctx, repaint, b);
     note.appendChild(b);
     wrap.appendChild(note);
     return wrap;
