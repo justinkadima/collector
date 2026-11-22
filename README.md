@@ -69,6 +69,13 @@ still builds and runs with `-browser`.
   wash a run of blocks, then `Delete`/`Backspace` removes exactly those lines
   from the file, or just start typing to replace the run. `Esc` drops the
   selection. Inside one block, ordinary text selection still applies.
+- **Blocks can be dragged into a different order.** Hover a block and a six-dot
+  handle appears in the gutter; drag it up or down and a line shows where the
+  block will land. The block moves as its source lines — a heading stays a
+  heading, a table keeps its rows, a list item takes its indented children — and
+  a single blank line is left between whatever ends up adjoining. Dropping the
+  handle of a block inside a selection moves the whole selection. Dragging to
+  the edge of the window scrolls the page.
 - Autosave, with an optimistic-concurrency check so an edit made in vim doesn't
   get clobbered.
 - `[[Wiki links]]` resolve by path or by name, and every page shows its

@@ -1222,6 +1222,58 @@ body.no-workspace #reveal-btn {
   fill: currentColor;
 }
 
+/* Block drag handle + drop indicator */
+.block-grip {
+  position: fixed;
+  z-index: 61;
+  display: none;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 0;
+  border-radius: 5px;
+  color: var(--text-faint);
+  background: transparent;
+  cursor: grab;
+}
+.block-grip.on {
+  display: grid;
+}
+.block-grip:hover {
+  color: var(--text);
+  background: var(--hover);
+}
+.block-grip.dragging {
+  cursor: grabbing;
+  background: var(--hover);
+  color: var(--text);
+}
+.block-grip svg {
+  width: 15px;
+  height: 15px;
+  fill: currentColor;
+}
+.block-dragging,
+.block-dragging * {
+  cursor: grabbing;
+}
+.block-dragged {
+  opacity: 0.4;
+}
+.drop-line {
+  position: fixed;
+  z-index: 60;
+  display: none;
+  height: 2px;
+  border-radius: 1px;
+  background: var(--accent);
+  pointer-events: none;
+}
+.drop-line.on {
+  display: block;
+}
+
 /* Table row/column menu */
 .table-menu {
   min-width: 246px;

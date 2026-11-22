@@ -855,6 +855,243 @@ export function initBlocks(opts) {
   };
   document.addEventListener("mouseup", endPress, true);
 
+  /* ---- moving blocks ---- */
+
+  // Hover a block and a six-dot handle appears in the gutter; drag it and the
+  // block's source lines move. A block is a range of lines, so moving one is
+  // moving those lines — nothing is re-encoded, and the file stays the file.
+
+  const GRIP_DOTS =
+    '<circle cx="9" cy="6" r="1.4"/><circle cx="15" cy="6" r="1.4"/>' +
+    '<circle cx="9" cy="12" r="1.4"/><circle cx="15" cy="12" r="1.4"/>' +
+    '<circle cx="9" cy="18" r="1.4"/><circle cx="15" cy="18" r="1.4"/>';
+
+  let grip = null;
+  let gripUnit = null;
+  let gripHide = 0;
+  let dropLine = null;
+  let drag = null; // { span, y0, moved, target }
+  let lastY = 0;
+  let scrollTimer = 0;
+
+  function gripEl() {
+    if (grip) return grip;
+    grip = document.createElement("button");
+    grip.type = "button";
+    grip.className = "block-grip";
+    grip.setAttribute("aria-label", "Drag to move this block");
+    grip.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true">' + GRIP_DOTS + "</svg>";
+    grip.addEventListener("mousedown", (e) => {
+      // Own the gesture: the host's mousedown would commit an open editor and
+      // decide this was a press on a block.
+      e.preventDefault();
+      e.stopPropagation();
+      beginDrag(e);
+    });
+    grip.addEventListener("mouseenter", () => clearTimeout(gripHide));
+    grip.addEventListener("mouseleave", () => scheduleHide());
+    document.body.appendChild(grip);
+    return grip;
+  }
+
+  function placeGrip(unit) {
+    const el = gripEl();
+    clearTimeout(gripHide);
+    gripUnit = unit;
+    // Anchor to the block's first line, the way Notion's handle does.
+    const r = unit.getBoundingClientRect();
+    const first = unit.matches("li, p, h1, h2, h3, h4, h5, h6") ? unit : unit.querySelector("p, h1, h2, h3, h4, h5, h6, li") || unit;
+    const fr = first.getBoundingClientRect();
+    const lh = parseFloat(css(first, "line-height")) || 24;
+    el.style.top = Math.round(fr.top + Math.min(fr.height, lh) / 2 - 11) + "px";
+    // Sit outside the table's own row handle, which lives at left - 26.
+    el.style.left = Math.round(Math.max(4, r.left - 50)) + "px";
+    el.classList.add("on");
+  }
+
+  function hideGrip() {
+    gripUnit = null;
+    if (grip) grip.classList.remove("on");
+  }
+
+  function scheduleHide() {
+    clearTimeout(gripHide);
+    gripHide = setTimeout(hideGrip, 200);
+  }
+
+  host.addEventListener("mousemove", (e) => {
+    if (drag) return;
+    if (e.target.closest?.(".block-grip")) return;
+    const unit = unitOf(e.target);
+    if (!unit) return scheduleHide();
+    placeGrip(unit);
+  });
+  host.addEventListener("mouseleave", () => {
+    if (!drag) scheduleHide();
+  });
+  // The handle is positioned in viewport coordinates, so scrolling moves the
+  // block out from under it.
+  document.addEventListener("scroll", () => {
+    if (!drag) hideGrip();
+  }, true);
+
+  /** The lines a block owns: a list item takes its deeper-indented children. */
+  function dragSpan(unit) {
+    const r = range(unit);
+    if (unit.dataset.kind !== "li") return r;
+    const lines = (body() || "").split("\n");
+    const indent = ((lines[r.from] || "").match(/^\s*/) || [""])[0].length;
+    while (r.to < lines.length && /^\s+\S/.test(lines[r.to]) && (lines[r.to].match(/^\s*/) || [""])[0].length > indent) r.to++;
+    return r;
+  }
+
+  function beginDrag(e) {
+    if (!gripUnit) return;
+    const r = dragSpan(gripUnit);
+    // Dragging the handle of a block inside a selection moves the selection.
+    const span = sel && sel.from <= r.from && sel.to >= r.to ? { ...sel } : r;
+    if (sel) clearSelection();
+    drag = { span, y0: e.clientY, moved: false, target: null };
+    lastY = e.clientY;
+    grip.classList.add("dragging");
+    document.addEventListener("mousemove", onDragMove, true);
+    document.addEventListener("mouseup", onDragUp, true);
+    scrollTimer = setInterval(autoScroll, 16);
+  }
+
+  /** Where the block would land for a pointer at `y`. */
+  function updateTarget(y) {
+    lastY = y;
+    let target = null;
+    let box = null;
+    for (const el of tops()) {
+      const r = el.getBoundingClientRect();
+      if (y < r.top + r.height / 2) {
+        target = Number(el.dataset.line);
+        box = r;
+        break;
+      }
+    }
+    drag.target = target;
+    showDropLine(box);
+  }
+
+  const scrollerOf = () => {
+    for (let el = host.parentElement; el; el = el.parentElement) {
+      const oy = getComputedStyle(el).overflowY;
+      if ((oy === "auto" || oy === "scroll") && el.scrollHeight > el.clientHeight) return el;
+    }
+    return null;
+  };
+
+  // A long page cannot be reordered with a drag that stops at the fold, so the
+  // edge of the window scrolls while the pointer rests there.
+  function autoScroll() {
+    if (!drag) return;
+    const sc = scrollerOf();
+    const zone = 70;
+    let dy = 0;
+    if (lastY > innerHeight - zone) dy = Math.ceil((lastY - (innerHeight - zone)) / 3) + 3;
+    else if (lastY < zone) dy = -Math.ceil((zone - lastY) / 3) - 3;
+    if (sc && dy) {
+      const was = sc.scrollTop;
+      sc.scrollTop += dy;
+      if (sc.scrollTop !== was && drag.moved) updateTarget(lastY);
+    }
+  }
+
+  function onDragMove(e) {
+    if (!drag) return;
+    e.preventDefault();
+    if (!drag.moved) {
+      if (Math.abs(e.clientY - drag.y0) < 4) return;
+      drag.moved = true;
+      host.classList.add("block-dragging");
+      for (const el of tops()) {
+        const r = range(el);
+        if (r.from === drag.span.from && r.to === drag.span.to) el.classList.add("block-dragged");
+      }
+    }
+    updateTarget(e.clientY);
+  }
+
+  function showDropLine(box) {
+    if (!dropLine) {
+      dropLine = document.createElement("div");
+      dropLine.className = "drop-line";
+      document.body.appendChild(dropLine);
+    }
+    if (!box) {
+      const last = tops().pop()?.getBoundingClientRect();
+      if (!last) return;
+      box = { left: last.left, width: last.width, top: last.bottom + 2 };
+    }
+    dropLine.style.left = Math.round(box.left) + "px";
+    dropLine.style.top = Math.round(box.top - 2) + "px";
+    dropLine.style.width = Math.round(box.width) + "px";
+    dropLine.classList.add("on");
+  }
+
+  function hideDropLine() {
+    if (dropLine) dropLine.classList.remove("on");
+  }
+
+  function onDragUp() {
+    document.removeEventListener("mousemove", onDragMove, true);
+    document.removeEventListener("mouseup", onDragUp, true);
+    clearInterval(scrollTimer);
+    host.classList.remove("block-dragging");
+    for (const el of tops()) el.classList.remove("block-dragged");
+    hideDropLine();
+    grip?.classList.remove("dragging");
+    const d = drag;
+    drag = null;
+    hideGrip();
+    if (!d?.moved) return;
+    if (d.target != null && d.target >= d.span.from && d.target <= d.span.to) return; // dropped on itself
+    moveSpan(d.span, d.target);
+  }
+
+  /** Move a run of source lines in front of `targetLine`; null means the end. */
+  function moveSpan(span, targetLine) {
+    const src = body() || "";
+    const lines = src.split("\n");
+    const { from, to } = span;
+    const moved = lines.slice(from, to);
+    const rest = [...lines.slice(0, from), ...lines.slice(to)];
+    let at = targetLine == null ? rest.length : targetLine - (targetLine > to ? to - from : 0);
+
+    // Taking the block out can leave two blank lines behind at the cut; collapse
+    // them, and move the landing point with them.
+    let seam = from;
+    while (seam > 0 && rest[seam] != null && !rest[seam - 1].trim() && !rest[seam].trim()) {
+      rest.splice(seam - 1, 1);
+      if (at > seam - 1) at--;
+      seam--;
+    }
+    at = Math.max(0, Math.min(at, rest.length));
+
+    // Blank lines at the seam are separators, not content: drop them and put
+    // one back where the block lands, so a move never glues two blocks together.
+    const before = rest.slice(0, at);
+    const after = rest.slice(at);
+    while (before.length && !before[before.length - 1].trim()) before.pop();
+    while (after.length && !after[0].trim()) after.shift();
+    const out = [...before];
+    // Lifting the first block off the top of the page would otherwise leave a
+    // blank line at line 1.
+    while (out.length && !out[0].trim()) out.shift();
+    if (out.length) out.push("");
+    out.push(...moved);
+    if (after.length) out.push("", ...after);
+    let text = out.join("\n");
+    if (src.endsWith("\n") && !text.endsWith("\n")) text += "\n";
+    if (text === src) return;
+    lastRange = null;
+    commit(text, true);
+    render();
+  }
+
   function unitOf(node) {
     if (!node || !host.contains(node)) return null;
     let top = node;
