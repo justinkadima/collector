@@ -33,7 +33,7 @@ var embedded embed.FS
 // `not1 -version` never disagree. Release builds can pin it:
 //
 //	go build -ldflags "-X main.version=0.2" -o not1 .
-var version = "0.2"
+var version = "0.3"
 
 func main() {
 	// `not1 mcp` runs the Model Context Protocol server on stdin/stdout instead
