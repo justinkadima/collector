@@ -14,8 +14,28 @@ permissions:
   contents: write
 
 jobs:
+  guard:
+    name: The tag and the program agree
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # A release whose binary reports a different number than its tag is worse
+      # than no release: it makes `collector -version` a lie. The version is a Go
+      # variable, so this is the only place the two can be compared.
+      - name: Compare the tag with main.go
+        run: |
+          want="${GITHUB_REF_NAME#v}"
+          have=$(sed -n 's/^var version = "\(.*\)".*/\1/p' main.go)
+          echo "tag $GITHUB_REF_NAME, program $have"
+          if [ "$want" != "$have" ]; then
+            echo "::error::tag is $GITHUB_REF_NAME but main.go says \"$have\""
+            exit 1
+          fi
+
   macos:
     name: macOS bundle
+    needs: guard
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
@@ -40,6 +60,7 @@ jobs:
 
   linux:
     name: Linux binary
+    needs: guard
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -69,6 +90,7 @@ jobs:
 
   windows:
     name: Windows binary
+    needs: guard
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
