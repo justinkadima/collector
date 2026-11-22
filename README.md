@@ -150,25 +150,30 @@ the tile.
   language and a Copy button; click the language to change it, which rewrites
   that one fence line. Highlighting is a small built-in tokenizer — no
   dependency, and an unknown language is just escaped.
-- **Events live in the page that owns them.** Write an ```events fence and each
-  line is an event: `2026-11-24 09:30 Standup`, `2026-11-24 14:00-15:00 Design
-  review`, or just `2026-11-26 Justin's birthday` for an all-day one. Blank
-  lines and `#` comments are ignored. Nothing else stores them — the fence is an
-  ordinary code block, so the file still reads fine in vim or Obsidian, and
-  deleting the index loses no events. `/events` starts one, dated today.
-- **The block is editable as a block.** The `⋯` in its bar adds an event (a date
-  and an optional time, then the caret in the page where the title goes) or
-  deletes the whole block; a row's `⋯` sets or changes that event's time, makes
-  it all day, or deletes it. Clicking a row's time opens the same time field.
-  Every one of those is a splice of source lines — setting a time rewrites one
-  line, nothing is stored anywhere else.
+- **One event, one block.** An ```events fence holds one line —
+  `2026-11-24 09:30 Design review` — and that is the whole record: a day, an
+  optional time (or a range, `14:00-15:00`), and a description. Leave the time
+  out and the event is all day. Blank lines and `#` notes inside the fence are
+  ignored, so a fence can still carry a comment. Nothing else stores the event:
+  a fence is an ordinary code block, so the file reads fine in vim or Obsidian,
+  and deleting the index loses nothing. `/events` starts one, dated today.
+  A fence with several lines is what an older page (or a hand-written one)
+  looks like; it still renders as a list, and works the same way.
+- **The three fields are editable in place.** Click the day for a date field,
+  the time for start and end (empty means all day), the description to type
+  over it. The `⋯` on a block sets a time, makes it all day, duplicates the
+  event as a new block below, or deletes it — and deleting the only event in a
+  block takes the block with it. Every one of those is a splice of source
+  lines: setting a time rewrites that one line, from the parsed event, so
+  nothing is stored anywhere else and nothing can drift.
 - **The calendar is a column, not a window.** The toolbar's calendar opens a
   month on the right; the page keeps its width while you read it. Days with
   events carry dots (a faint one for an all-day event), the selected day lists
   its events underneath, and clicking one opens the page scrolled to the line
-  that defines it. The `+` on a day writes `2026-12-03 ` into the page's last
-  events fence and leaves the caret there, so you type the title and nothing
-  else. With no page open it opens your "Calendar" page, or makes one.
+  that defines it. The `+` on a day asks for a time and then writes a new
+  block — one event, dated that day, its description already selected, so you
+  type the name and nothing else. With no page open it opens your "Calendar"
+  page, or makes one.
 - Live file watching via SSE: edits from another editor show up without a
   reload; unsaved changes raise a conflict banner instead of being lost.
 - Light/dark theme, resizable and collapsible sidebar, both remembered.

@@ -1,11 +1,15 @@
-// The events block's own controls.
+// The events block: one block, one event.
 //
-// An events block is a ```events fence. Its rows are lines, so everything here
-// is a splice of source lines and nothing is stored anywhere else: setting a
-// time rewrites one line, deleting a row removes one line, deleting the block
-// removes the fence. The page is the only copy.
+// An events block is a ```events fence holding one line —
+// `2026-11-24 09:30 Design review`. This module owns the three fields of that
+// line (day, time, description) and the block's own menu. Every action is a
+// splice of source lines, so the page stays the only copy: changing the day
+// rewrites the date, changing a description rewrites the text after it.
+//
+// A fence with several lines is still rendered as a list (older pages, or
+// hand-written ones); the same controls work row by row.
 
-import { escapeHtml, parseEventLine } from "./markdown.js";
+import { parseEventLine } from "./markdown.js";
 
 let api = null; // { host, source, commit, openAt, menu }
 
@@ -57,150 +61,242 @@ export function lastFence(src) {
   return null;
 }
 
-/**
- * Write `date [HH:MM[-HH:MM]] ` as a new line inside a fence and return the
- * line number it landed on. `openLine` picks the fence; without it the page's
- * last one is used, and one is made when the page has none.
- */
-export function insertEvent(src, date, start, end, openLine = null) {
-  const entry = `${date}${start ? " " + start + (end ? "-" + end : "") : ""} `;
-  const range = openLine == null ? lastFence(src) : fenceAt(src, openLine);
-  if (range) {
-    const [open, close] = range;
-    let at = close;
-    while (at > open + 1 && !src[at - 1].trim()) at--;
-    src.splice(at, 0, entry);
-    return at;
+/** One event, one block: a fence holding a single line. */
+export function insertBlock(src, line) {
+  const last = lastFence(src);
+  if (last) {
+    const [open, close] = last;
+    const body = src.slice(open + 1, close);
+    // An empty fence is the block the user just made: fill it, do not add a
+    // second one underneath.
+    if (!body.some((l) => l.trim())) {
+      src.splice(open + 1, body.length, line);
+      return open + 1;
+    }
   }
   while (src.length && !src[src.length - 1].trim()) src.pop();
   if (src.length) src.push("");
   src.push("```events");
   const at = src.length;
-  src.push(entry, "```");
+  src.push(line, "```");
   return at;
 }
 
-/* ---------- actions ---------- */
+/** A new block right after the one that opens on `openLine`. */
+function insertAfter(src, openLine, line) {
+  const range = fenceAt(src, openLine);
+  if (!range) return null;
+  const at = range[1] + 1;
+  src.splice(at, 0, "", "```events", line, "```");
+  return at + 2;
+}
 
-async function setTime(line, ev, x, y) {
-  const pick = await askEvent({ date: ev.date, start: ev.start, end: ev.end, timeOnly: true, head: ev.title, x, y });
-  if (!pick) return;
+/* ---------- field edits ---------- */
+
+/** Change one field of an event, keeping everything else on the line. */
+function setFields(line, patch) {
   const out = lines();
   const cur = parseEventLine(out[line]);
   if (!cur) return;
-  out[line] = eventLine({ ...cur, start: pick.start, end: pick.end });
+  out[line] = eventLine({ ...cur, ...patch });
   write(out);
 }
 
-function allDay(line, ev) {
-  const out = lines();
-  const cur = parseEventLine(out[line]);
-  if (!cur) return;
-  out[line] = eventLine({ ...cur, start: "", end: "" });
+/** The events fence whose body holds `line`, as its opening line number. */
+function enclosingFence(src, line) {
+  for (let i = Math.min(line, src.length - 1); i >= 0; i--) {
+    if (!FENCE_RE.test(src[i])) continue;
+    const range = fenceAt(src, i);
+    return range && line > range[0] && line < range[1] ? range[0] : null;
+  }
+  return null;
+}
+
+/** Take the fence out, and the blank line it was separated by. */
+function removeFence(out, [open, close]) {
+  out.splice(open, close - open + 1);
+  if ((out[open] || "").trim() === "" && (open === 0 || (out[open - 1] || "").trim() === "")) out.splice(open, 1);
   write(out);
 }
 
 function deleteLine(line) {
   const out = lines();
   if (line < 0 || line >= out.length) return;
+  const open = enclosingFence(out, line);
   out.splice(line, 1);
+  // One event, one block: an event with no line is a block with no reason to
+  // exist, so the block goes too.
+  if (open != null) {
+    const range = fenceAt(out, open);
+    if (range && !out.slice(range[0] + 1, range[1]).some((l) => l.trim())) return removeFence(out, range);
+  }
   write(out);
 }
 
 function deleteBlock(openLine) {
   const out = lines();
   const range = fenceAt(out, openLine);
-  if (!range) return;
-  const [open, close] = range;
-  out.splice(open, close - open + 1);
-  // Do not leave the blank line the block was separated by behind.
-  if ((out[open] || "").trim() === "" && (open === 0 || (out[open - 1] || "").trim() === "")) out.splice(open, 1);
+  if (range) removeFence(out, range);
+}
+
+function duplicate(line, openLine) {
+  const out = lines();
+  const text = (out[line] || "").trim();
+  if (!text || !insertAfterInto(out, openLine, text)) return;
   write(out);
 }
 
-async function addTo(openLine, x, y) {
-  const pick = await askEvent({ date: todayISO(), head: "New event", x, y });
+function insertAfterInto(out, openLine, text) {
+  const at = insertAfter(out, openLine, text);
+  return at != null;
+}
+
+/* ---------- the block's controls ---------- */
+
+async function setDay(line, ev, x, y) {
+  const pick = await askEvent({ date: ev.date, mode: "date", head: "Day", x, y });
+  if (!pick) return;
+  setFields(line, { date: pick.date });
+}
+
+async function setTime(line, ev, x, y) {
+  const pick = await askEvent({ date: ev.date, start: ev.start, end: ev.end, mode: "time", head: ev.title, x, y });
+  if (!pick) return;
+  setFields(line, { start: pick.start, end: pick.end });
+}
+
+async function addBlock(openLine, x, y) {
+  const pick = await askEvent({ date: todayISO(), mode: "full", head: "New event", x, y });
   if (!pick) return;
   const out = lines();
-  const at = insertEvent(out, pick.date, pick.start, pick.end, openLine);
-  const text = out[at];
+  const line = eventLine({ ...pick, title: "New event" });
+  const at = insertAfter(out, openLine, line);
+  if (at == null) return;
   write(out);
-  // Park the caret where the title goes: the line is a date, not a sentence.
-  setTimeout(() => {
-    if (!api.openAt(at, text.length)) return;
-    const ta = document.querySelector("textarea.block-edit");
-    const pos = ta ? ta.value.indexOf(text) : -1;
-    if (ta && pos >= 0) ta.setSelectionRange(pos + text.length, pos + text.length);
-  }, 40);
+  setTimeout(() => editDescription(at, { select: true }), 60);
 }
 
-/* ---------- the block's menus ---------- */
+/**
+ * Type over an event's description in place. Enter or clicking away writes the
+ * line; Esc leaves it as it was. `select` swaps the whole text, which is what
+ * a freshly added event wants.
+ */
+export function editDescription(line, { select = false } = {}) {
+  const row = api?.host?.querySelector(`[data-ev-line="${line}"]`);
+  const span = row?.querySelector(".ev-title");
+  const ev = parseEventLine(lines()[line]);
+  if (!span || !ev) return false;
+
+  const box = span.getBoundingClientRect();
+  const cs = getComputedStyle(span);
+  const input = document.createElement("input");
+  input.className = "ev-desc-edit";
+  input.value = ev.title;
+  input.spellcheck = false;
+  Object.assign(input.style, {
+    left: Math.round(box.left) + "px",
+    top: Math.round(box.top) + "px",
+    width: Math.round(Math.max(box.width, 140) + 8) + "px",
+    height: Math.round(box.height) + "px",
+    font: cs.font,
+    color: cs.color,
+  });
+  document.body.appendChild(input);
+  input.focus();
+  if (select) input.select();
+  else input.setSelectionRange(input.value.length, input.value.length);
+
+  let done = false;
+  const finish = (save) => {
+    if (done) return;
+    done = true;
+    input.remove();
+    const next = input.value.trim();
+    if (save && next && next !== ev.title) setFields(line, { title: next });
+  };
+  input.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      finish(true);
+    } else if (e.key === "Escape") {
+      e.preventDefault();
+      finish(false);
+    }
+    e.stopPropagation();
+  });
+  input.addEventListener("blur", () => finish(true));
+  return true;
+}
 
 function onClick(e) {
   const bar = e.target.closest?.(".md-events-more");
   const more = bar ? null : e.target.closest?.(".ev-more");
-  const time = bar || more ? null : e.target.closest?.(".ev-time");
-  if (!bar && !more && !time) return;
+  const day = bar || more ? null : e.target.closest?.(".ev-day");
+  const time = bar || more || day ? null : e.target.closest?.(".ev-time");
+  const desc = bar || more || day || time ? null : e.target.closest?.(".ev-title");
+  if (!bar && !more && !day && !time && !desc) return;
   e.preventDefault();
   e.stopPropagation();
 
-  const card = e.target.closest(".md-events");
-  const row = e.target.closest(".ev, .ev-bad");
-  const n = row ? Number(row.dataset.evLine) : NaN;
-  const line = Number.isFinite(n) ? n : -1;
   const x = e.clientX || 0;
   const y = e.clientY || 0;
+  const card = e.target.closest(".md-events");
+  const open = Number(card?.dataset.line);
+  const n = Number(e.target.closest(".ev, .ev-bad")?.dataset.evLine);
+  const line = Number.isFinite(n) ? n : -1;
+  const ev = line >= 0 ? parseEventLine(lines()[line]) : null;
 
   if (bar) {
-    const open = Number(card?.dataset.line);
     api.menu(x, y, [
-      { label: "Add event…", icon: "plus", action: () => addTo(open, x, y) },
+      { label: "Add event", icon: "plus", action: () => addBlock(open, x, y) },
       "-",
       { label: "Delete events block", icon: "trash", danger: true, action: () => deleteBlock(open) },
     ]);
     return;
   }
 
-  const out = lines();
-  const ev = line >= 0 ? parseEventLine(out[line]) : null;
   if (!ev) {
-    // A line that is not an event yet can still be taken out of the block.
     if (line >= 0) api.menu(x, y, [{ label: "Delete line", icon: "trash", danger: true, action: () => deleteLine(line) }]);
     return;
   }
-  if (time) {
-    setTime(line, ev, x, y);
-    return;
-  }
+
+  if (day) return void setDay(line, ev, x, y);
+  if (time) return void setTime(line, ev, x, y);
+  if (desc) return void editDescription(line);
+
   const items = [{ label: ev.start ? "Change time…" : "Set time…", icon: "clock", action: () => setTime(line, ev, x, y) }];
-  if (ev.start) items.push({ label: "Make it all day", icon: "calendar", action: () => allDay(line, ev) });
-  items.push("-", { label: "Delete event", icon: "trash", danger: true, action: () => deleteLine(line) });
+  if (ev.start) items.push({ label: "Make it all day", icon: "calendar", action: () => setFields(line, { start: "", end: "" }) });
+  items.push({ label: "Change day…", icon: "calendar", action: () => setDay(line, ev, x, y) });
+  items.push("-", { label: "Duplicate event", icon: "copy", action: () => duplicate(line, open) });
+  items.push({ label: "Delete event", icon: "trash", danger: true, action: () => deleteLine(line) });
   api.menu(x, y, items);
 }
 
 /* ---------- date & time dialog ---------- */
 
 /**
- * Ask for a date and an optional time. Resolves with { date, start, end } or
- * null. Empty start means all day — the same thing the line says.
+ * Ask for a day, a time, or both. Resolves with { date, start, end } or null.
+ * An empty start means all day — the same thing the line says.
  */
-export function askEvent({ date = todayISO(), start = "", end = "", timeOnly = false, head = "New event", x = 0, y = 0 } = {}) {
+export function askEvent({ date = todayISO(), start = "", end = "", mode = "full", head = "New event", x = 0, y = 0 } = {}) {
   return new Promise((resolve) => {
+    const withDate = mode !== "time";
+    const withTime = mode !== "date";
     const node = document.createElement("div");
     node.className = "url-pop ev-pop";
     node.dataset.opensMenu = "1";
     node.innerHTML =
-      `<div class="url-head">${escapeHtml(head)}</div>` +
-      (timeOnly
-        ? ""
-        : `<input class="url-input ev-date" type="date" value="${escapeHtml(date)}" aria-label="Date">`) +
-      `<div class="ev-times">` +
-      `<input class="url-input ev-start" type="time" value="${escapeHtml(start)}" aria-label="Start time">` +
-      `<span class="ev-dash">–</span>` +
-      `<input class="url-input ev-end" type="time" value="${escapeHtml(end)}" aria-label="End time">` +
-      `</div>` +
-      `<div class="ev-hint">No time means all day.</div>` +
-      `<button class="btn primary url-add">${timeOnly ? "Set" : "Add"}</button>`;
+      `<div class="url-head">${esc(head)}</div>` +
+      (withDate ? `<input class="url-input ev-date" type="date" value="${esc(date)}" aria-label="Day">` : "") +
+      (withTime
+        ? `<div class="ev-times">` +
+          `<input class="url-input ev-start" type="time" value="${esc(start)}" aria-label="Start time">` +
+          `<span class="ev-dash">–</span>` +
+          `<input class="url-input ev-end" type="time" value="${esc(end)}" aria-label="End time">` +
+          `</div>` +
+          `<div class="ev-hint">No time means all day.</div>`
+        : "") +
+      `<button class="btn primary url-add">${mode === "full" ? "Add" : "Set"}</button>`;
     document.body.appendChild(node);
 
     const dateIn = node.querySelector(".ev-date");
@@ -223,12 +319,12 @@ export function askEvent({ date = todayISO(), start = "", end = "", timeOnly = f
       resolve(value);
     };
     const submit = () => {
-      const d = timeOnly ? date : dateIn?.value || "";
-      const s = startIn.value || "";
-      const e = endIn.value || "";
+      const d = dateIn ? dateIn.value : date;
+      const s = startIn?.value || "";
+      const e = endIn?.value || "";
       if (!d) return;
       // An end without a start is meaningless: keep the range the right way up.
-      finish({ date: d, start: s, end: s ? e : "" });
+      finish({ date: d, start: withTime ? s : start, end: withTime && s ? e : end });
     };
     node.querySelector(".url-add").onclick = submit;
     node.addEventListener("keydown", (e) => {
@@ -245,8 +341,15 @@ export function askEvent({ date = todayISO(), start = "", end = "", timeOnly = f
       if (!node.contains(e.target)) finish(null);
     };
     setTimeout(() => {
-      (timeOnly ? startIn : dateIn)?.focus();
+      (dateIn || startIn)?.focus();
       document.addEventListener("mousedown", away, true);
     }, 0);
   });
 }
+
+const esc = (s) =>
+  String(s ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");

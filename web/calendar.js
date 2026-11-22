@@ -215,9 +215,11 @@ export function initCalendar(opts) {
     `<div class="cal-list" id="calendar-list"></div>` +
     `</div></div>`;
   bind();
-  // The panel is a place you leave open for the day, so it remembers.
-  state.open = localStorage.getItem("not1-calendar") === "1";
-  if (state.open) openCalendar();
+  // The panel is a place you leave open for the day, so it remembers. Start
+  // closed and let openCalendar() do the opening, so the first paint has the
+  // month's events instead of an empty grid.
+  state.open = false;
+  if (localStorage.getItem("not1-calendar") === "1") openCalendar();
 }
 
 export function openCalendar() {

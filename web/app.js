@@ -11,7 +11,7 @@ import {
 } from "./cells.js";
 import { fetchDatabase, renderDatabase } from "./db.js";
 import { initBlocks } from "./blocks.js";
-import { initEvents, askEvent, insertEvent } from "./events.js";
+import { initEvents, askEvent, insertBlock, editDescription } from "./events.js";
 import { initCalendar, toggleCalendar, refreshCalendar } from "./calendar.js";
 import { autoResize, caretCoords } from "./editor.js";
 
@@ -1097,7 +1097,6 @@ function bindEditor() {
     host: el.preview,
     source: () => state.page?.body ?? "",
     commit: commitBody,
-    openAt: (line, pos) => blocks?.openAtLine(line, pos),
     menu: (x, y, items) => openMenu(x, y, items),
   });
   initCells({
@@ -1338,12 +1337,22 @@ const SLASH_ITEMS = [
   {
     key: "events",
     label: "Events",
-    desc: "Today, on the calendar",
+    desc: "One event, on the calendar",
     icon: "🗓",
-    // A block construct, so it arrives with air around it and the date already
-    // started: the caret lands where the title goes.
+    // A block construct, so it arrives with air around it, dated today, with the
+    // description selected: type, and the event has a name.
     block: true,
     gen: () => eventsTemplate(),
+    // The fence is text the moment it is inserted, but an event is a block with
+    // three fields — so write it and put the caret in the description.
+    after: () => {
+      blocks?.commitNow();
+      setTimeout(() => {
+        const rows = [...el.preview.querySelectorAll(".md-events.single .ev")];
+        const last = rows[rows.length - 1];
+        if (last) editDescription(Number(last.dataset.evLine), { select: true });
+      }, 90);
+    },
     match: ["events", "event", "calendar", "agenda", "schedule", "date"],
   },
   { key: "link", label: "Link to page", desc: "[[", icon: "⧉", template: "[[", match: ["link", "page", "wikilink", "[["] },
@@ -1468,12 +1477,14 @@ function closeSlash() {
 
 const pad2 = (n) => String(n).padStart(2, "0");
 
-/** Today's fence, with the caret where the title goes. */
+const PLACEHOLDER = "New event";
+
+/** One event, today, with its description selected. */
 function eventsTemplate() {
   const d = new Date();
   const date = `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
-  const line = date + " ";
-  return { text: "```events\n" + line + "\n```", caret: "```events\n".length + line.length };
+  const line = date + " " + PLACEHOLDER;
+  return { text: "```events\n" + line + "\n```", select: PLACEHOLDER };
 }
 
 function applySlash(item) {
@@ -1499,7 +1510,13 @@ function applySlash(item) {
   }
   ta.setRangeText(template, slash.start, end, "end");
   const shift = template.length - (gen ? gen.text : item.template).length;
-  if (gen) {
+  if (gen?.select) {
+    // Select by text, not by offset: a fence's own markers are hidden while it
+    // is being edited, so offsets into the template do not survive.
+    const i = ta.value.lastIndexOf(gen.select);
+    if (i >= 0) ta.setSelectionRange(i, i + gen.select.length);
+    else ta.setSelectionRange(ta.value.length, ta.value.length);
+  } else if (gen) {
     const pos = slash.start + shift + gen.caret;
     ta.setSelectionRange(pos, pos);
   } else if (item.sel) {
@@ -1511,6 +1528,7 @@ function applySlash(item) {
   }
   ta.dispatchEvent(new Event("input", { bubbles: true }));
   closeSlash();
+  item.after?.();
 }
 
 /* ------------------------------------------------------------- media blocks */
@@ -2667,8 +2685,8 @@ function revealLine(line) {
 }
 
 /**
- * Write an event by writing a line. The panel asks; the page is the answer:
- * append to the page's last ```events block, or give the page one.
+ * Write an event by writing a block. The panel asks; the page is the answer:
+ * one event, one ```events fence, added where the page ends.
  */
 async function addEventOn(date, start = "", end = "") {
   if (state.needsWorkspace) return;
@@ -2697,24 +2715,20 @@ async function addEventOn(date, start = "", end = "") {
 
   const lines = (state.page.body || "").replace(/\r/g, "").split("\n");
   if (lines.length === 1 && !lines[0].trim()) lines.length = 0;
-  const at = insertEvent(lines, date, start, end);
-  const entry = lines[at];
+  const line = [date, [start, end].filter(Boolean).join("-"), PLACEHOLDER].filter(Boolean).join(" ");
+  const at = insertBlock(lines, line);
 
   commitBody(lines.join("\n") + "\n", { rerender: true });
   await savePage();
-  // The caret belongs right after the date just written: type the title.
-  setTimeout(() => {
-    if (!blocks?.openAtLine(at, entry.length)) return;
-    const ta = document.querySelector("textarea.block-edit");
-    const pos = ta ? ta.value.lastIndexOf(entry) : -1;
-    if (ta && pos >= 0) ta.setSelectionRange(pos + entry.length, pos + entry.length);
-  }, 40);
+  // The description is selected, so typing names the event.
+  setTimeout(() => editDescription(at, { select: true }), 60);
 }
 
 /** The calendar's plus: a date and an optional time before it writes anything. */
 async function addEventDialog(date) {
   const r = document.querySelector("#calendar-add")?.getBoundingClientRect();
   const pick = await askEvent({ date, head: "New event", x: (r?.right ?? window.innerWidth) - 258, y: r?.bottom ?? 90 });
+
   if (!pick) return;
   await addEventOn(pick.date, pick.start, pick.end);
 }

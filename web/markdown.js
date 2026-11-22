@@ -442,32 +442,43 @@ function eventsBlock(code, at, openLine = 0) {
     .filter((r) => r.line.trim());
   const events = rows.filter((r) => r.ev).length;
   const today = isoToday();
-  let body = "";
-  for (const r of rows) {
-    const more = `<button class="ev-more" data-ev-line="${r.n}" title="Event options" aria-label="Event options">⋯</button>`;
+
+  const row = (r) => {
+    const more = `<button class="ev-more" title="Event options" aria-label="Event options">⋯</button>`;
+    const n = ` data-ev-line="${r.n}"`;
     if (!r.ev) {
-      body +=
-        `<li class="ev-bad" data-ev-line="${r.n}" title="Not an event yet — a line reads: 2026-11-24 09:30 Title">` +
-        `<span class="ev-raw">${esc(r.line.trim())}</span>${more}</li>`;
-      continue;
+      return (
+        `<li class="ev-bad"${n} title="Not an event yet — a line reads: 2026-11-24 09:30 Title">` +
+        `<span class="ev-raw">${esc(r.line.trim())}</span>${more}</li>`
+      );
     }
     const ev = r.ev;
     const when = ev.start ? (ev.end ? ev.start + "–" + ev.end : ev.start) : "all day";
-    body +=
-      `<li class="ev${ev.date === today ? " today" : ""}" data-ev-line="${r.n}">` +
-      `<span class="ev-day">${esc(evDate.format(ev.at))}</span>` +
-      `<span class="ev-time${ev.start ? "" : " all"}" title="Set a time">${esc(when)}</span>` +
-      `<span class="ev-title">${esc(ev.title)}</span>` +
+    return (
+      `<li class="ev${ev.date === today ? " today" : ""}"${n}>` +
+      `<button class="ev-day" title="Change the day">${esc(evDate.format(ev.at))}</button>` +
+      `<button class="ev-time${ev.start ? "" : " all"}" title="Change the time">${esc(when)}</button>` +
+      `<span class="ev-title" title="Change the description">${esc(ev.title)}</span>` +
       more +
-      `</li>`;
-  }
+      `</li>`
+    );
+  };
+
+  // One event is a block, not a list: no bar, no count, just the event. A fence
+  // with several lines is what an older page (or a hand-written one) looks
+  // like, and it still reads as a list.
+  const single = rows.length === 1;
+  const bar = single
+    ? ""
+    : `<div class="md-events-bar"><span class="md-events-label">Events</span>` +
+      `<span class="md-events-count">${events}</span>` +
+      `<button class="md-events-more" title="Events options" aria-label="Events options">⋯</button></div>`;
+
   return (
-    `<div class="md-events"${at}>` +
-    `<div class="md-events-bar"><span class="md-events-label">Events</span>` +
-    `<span class="md-events-count">${events}</span>` +
-    `<button class="md-events-more" title="Events options" aria-label="Events options">⋯</button></div>` +
+    `<div class="md-events${single ? " single" : ""}"${at}>` +
+    bar +
     `<div class="md-events-body">` +
-    (body ? `<ul class="md-events-list">${body}</ul>` : `<div class="md-events-empty">No events yet.</div>`) +
+    (rows.length ? `<ul class="md-events-list">${rows.map(row).join("")}</ul>` : `<div class="md-events-empty">No events yet.</div>`) +
     `</div></div>`
   );
 }
