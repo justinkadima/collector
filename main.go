@@ -39,7 +39,7 @@ var appIcon []byte
 // `collector -version` never disagree. Release builds can pin it:
 //
 //	go build -ldflags "-X main.version=0.2" -o collector .
-var version = "0.7.1"
+var version = "0.7.2"
 
 func main() {
 	// `collector mcp` runs the Model Context Protocol server on stdin/stdout instead

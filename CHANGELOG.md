@@ -6,6 +6,17 @@ tags; the app prints the same number with `collector -version`.
 Nothing here has ever rewritten a page it wasn't asked to. When a release
 changes the markdown grammar it says so, and the old shape keeps working.
 
+## 0.7.2 — 2026-11-22
+
+**Files:** nothing moves.
+
+- A board with no grouping opened the "Choose a property" menu in the top-left
+  corner of the window instead of under the button. Choosing a property now
+  groups the board where you clicked.
+- The first release published by CI rather than by hand: `git tag` is the whole
+  release, and the build refuses to attach a binary whose `-version` disagrees
+  with the tag.
+
 ## 0.7.1 — 2026-11-22
 
 **Files:** nothing moves.
