@@ -29,6 +29,12 @@ import (
 //go:embed web
 var embedded embed.FS
 
+// The Dock icon for an unbundled executable; the .app bundle ships the .icns
+// that scripts/icon.sh derives from the same drawing.
+//
+//go:embed assets/not1-512.png
+var appIcon []byte
+
 // version tracks the git tag without the leading v, so `git tag v0.1` and
 // `not1 -version` never disagree. Release builds can pin it:
 //
@@ -98,7 +104,7 @@ func main() {
 		return
 	}
 
-	if err := app.Run(url, title, *debug); err != nil {
+	if err := app.Run(url, title, *debug, appIcon); err != nil {
 		log.Printf("native window unavailable (%v); falling back to the browser", err)
 		fmt.Printf("not1 running at %s\n", url)
 		_ = openBrowser(url)

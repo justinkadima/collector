@@ -9,7 +9,9 @@ import (
 	webview "github.com/webview/webview_go"
 )
 
-func Run(url, title string, debug bool) error {
+// Run opens the native window. `icon` is a PNG, if the binary carries one: it
+// gives an unbundled executable the same Dock icon as the .app.
+func Run(url, title string, debug bool, icon []byte) error {
 	w := webview.New(debug)
 	if w == nil {
 		return errors.New("webview init failed")
@@ -23,6 +25,9 @@ func Run(url, title string, debug bool) error {
 		w.Dispatch(func() { w.SetTitle(s) })
 		return ""
 	})
+
+	// On the main thread, once the application object exists.
+	w.Dispatch(func() { setDockIcon(icon) })
 
 	w.Navigate(url)
 	w.Run()

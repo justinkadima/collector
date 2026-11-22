@@ -19,6 +19,25 @@ Requires Go 1.22+ and, for the native window, CGO. On macOS the window is
 WebKit; on Linux/Windows it is GTK/WebView2. With `CGO_ENABLED=0` the binary
 still builds and runs with `-browser`.
 
+On macOS there is also a bundle, which is what Finder, the Dock, Spotlight and
+the window's menu bar like best:
+
+```
+./scripts/bundle.sh           # dist/not1.app
+./scripts/bundle.sh --run     # …and open it
+```
+
+`./not1` on its own is already a normal app window; the bundle only adds the
+things a loose executable cannot have — a name in the menu bar, an icon Finder
+can read, and something double-clickable. The icon itself is one SVG
+(`assets/icon.svg`): an ink tile, a page you own, and one block in the accent
+blue. `scripts/icon.sh` turns it into `assets/not1.icns` (for the bundle) and
+`assets/not1-512.png` (embedded in the binary, so the loose executable hands the
+same drawing to `NSApplication` and the Dock tile matches). Both outputs are
+checked in; the script only needs a Chromium when the drawing changes, because
+QuickLook flattens SVG onto white and a matte would show up as a square around
+the tile.
+
 ## The contract with your files
 
 - **Markdown is the source of truth.** The app never keeps a copy of your text
@@ -262,6 +281,9 @@ internal/mcpsrv         the same vault over MCP, for agents (not1 mcp)
 internal/app            native window (webview_go) and stub for CGO-less builds
 web/                    the UI: no framework, no build step, ES modules
 ```
+
+`scripts/` holds the two macOS chores: `icon.sh` (SVG → PNG + ICNS) and
+`bundle.sh` (build → `dist/not1.app`).
 
 The API is small and local: bootstrap, tree, page read/write (with `expectMod`
 for conflicts), rename, move, delete, search, resolve, database read/view/cell
