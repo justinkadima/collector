@@ -11,6 +11,7 @@ import {
 } from "./cells.js";
 import { fetchDatabase, renderDatabase } from "./db.js";
 import { initBlocks } from "./blocks.js";
+import { initEvents, askEvent, insertEvent } from "./events.js";
 import { initCalendar, toggleCalendar, refreshCalendar } from "./calendar.js";
 import { autoResize, caretCoords } from "./editor.js";
 
@@ -146,7 +147,7 @@ async function init() {
   initCalendar({
     // An event is a line in a file: opening one puts you on that line.
     open: (path, line) => openPage(path, { line }),
-    add: (date) => addEventOn(date),
+    add: (date) => addEventDialog(date),
   });
   try {
     const data = await api("/api/bootstrap");
@@ -1091,6 +1092,13 @@ function bindEditor() {
       el.editor.setSelectionRange(pos, pos);
       if (!updateLinkerFromInput()) updateSlashFromInput();
     },
+  });
+  initEvents({
+    host: el.preview,
+    source: () => state.page?.body ?? "",
+    commit: commitBody,
+    openAt: (line, pos) => blocks?.openAtLine(line, pos),
+    menu: (x, y, items) => openMenu(x, y, items),
   });
   initCells({
     source: () => state.page?.body ?? "",
@@ -2662,7 +2670,7 @@ function revealLine(line) {
  * Write an event by writing a line. The panel asks; the page is the answer:
  * append to the page's last ```events block, or give the page one.
  */
-async function addEventOn(date) {
+async function addEventOn(date, start = "", end = "") {
   if (state.needsWorkspace) return;
   if (!state.page) {
     // Nowhere to write yet: an events page is the natural home, and one is
@@ -2689,33 +2697,8 @@ async function addEventOn(date) {
 
   const lines = (state.page.body || "").replace(/\r/g, "").split("\n");
   if (lines.length === 1 && !lines[0].trim()) lines.length = 0;
-  const entry = date + " ";
-  let at = -1;
-
-  let open = -1;
-  for (let i = 0; i < lines.length; i++) {
-    if (/^\s*(`{3,}|~{3,})\s*events\s*$/.test(lines[i])) open = i;
-  }
-  if (open >= 0) {
-    const marker = lines[open].trim().charAt(0);
-    const closer = new RegExp("^\\s*" + marker + "{3,}\\s*$");
-    let close = lines.length;
-    for (let i = open + 1; i < lines.length; i++) {
-      if (closer.test(lines[i])) {
-        close = i;
-        break;
-      }
-    }
-    at = close;
-    while (at > open + 1 && !lines[at - 1].trim()) at--;
-    lines.splice(at, 0, entry);
-  } else {
-    while (lines.length && !lines[lines.length - 1].trim()) lines.pop();
-    if (lines.length) lines.push("");
-    lines.push("```events");
-    at = lines.length; // the line the user types on
-    lines.push(entry, "```");
-  }
+  const at = insertEvent(lines, date, start, end);
+  const entry = lines[at];
 
   commitBody(lines.join("\n") + "\n", { rerender: true });
   await savePage();
@@ -2726,6 +2709,14 @@ async function addEventOn(date) {
     const pos = ta ? ta.value.lastIndexOf(entry) : -1;
     if (ta && pos >= 0) ta.setSelectionRange(pos + entry.length, pos + entry.length);
   }, 40);
+}
+
+/** The calendar's plus: a date and an optional time before it writes anything. */
+async function addEventDialog(date) {
+  const r = document.querySelector("#calendar-add")?.getBoundingClientRect();
+  const pick = await askEvent({ date, head: "New event", x: (r?.right ?? window.innerWidth) - 258, y: r?.bottom ?? 90 });
+  if (!pick) return;
+  await addEventOn(pick.date, pick.start, pick.end);
 }
 
 /* ----------------------------------------------------------------- boot */

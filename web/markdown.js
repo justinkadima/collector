@@ -435,34 +435,37 @@ export function parseEventLine(line) {
 }
 
 /** An events fence renders as the thing it describes, not as source text. */
-function eventsBlock(code, at) {
+function eventsBlock(code, at, openLine = 0) {
   const rows = String(code || "")
     .split("\n")
-    .map((line) => ({ line, ev: parseEventLine(line) }))
+    .map((line, i) => ({ line, ev: parseEventLine(line), n: openLine + 1 + i }))
     .filter((r) => r.line.trim());
   const events = rows.filter((r) => r.ev).length;
   const today = isoToday();
   let body = "";
   for (const r of rows) {
+    const more = `<button class="ev-more" data-ev-line="${r.n}" title="Event options" aria-label="Event options">⋯</button>`;
     if (!r.ev) {
-      body += `<li class="ev-bad" title="Not an event yet — a line reads: 2026-11-24 09:30 Title">${esc(
-        r.line.trim()
-      )}</li>`;
+      body +=
+        `<li class="ev-bad" data-ev-line="${r.n}" title="Not an event yet — a line reads: 2026-11-24 09:30 Title">` +
+        `<span class="ev-raw">${esc(r.line.trim())}</span>${more}</li>`;
       continue;
     }
     const ev = r.ev;
     const when = ev.start ? (ev.end ? ev.start + "–" + ev.end : ev.start) : "all day";
     body +=
-      `<li class="ev${ev.date === today ? " today" : ""}">` +
+      `<li class="ev${ev.date === today ? " today" : ""}" data-ev-line="${r.n}">` +
       `<span class="ev-day">${esc(evDate.format(ev.at))}</span>` +
-      `<span class="ev-time${ev.start ? "" : " all"}">${esc(when)}</span>` +
+      `<span class="ev-time${ev.start ? "" : " all"}" title="Set a time">${esc(when)}</span>` +
       `<span class="ev-title">${esc(ev.title)}</span>` +
+      more +
       `</li>`;
   }
   return (
     `<div class="md-events"${at}>` +
     `<div class="md-events-bar"><span class="md-events-label">Events</span>` +
-    `<span class="md-events-count">${events}</span></div>` +
+    `<span class="md-events-count">${events}</span>` +
+    `<button class="md-events-more" title="Events options" aria-label="Events options">⋯</button></div>` +
     `<div class="md-events-body">` +
     (body ? `<ul class="md-events-list">${body}</ul>` : `<div class="md-events-empty">No events yet.</div>`) +
     `</div></div>`
@@ -505,7 +508,7 @@ export function renderMarkdown(src, ctx = {}) {
       i++; // closing fence (or EOF)
       const code = buf.join("\n");
       if (lang.toLowerCase() === "events") {
-        out += eventsBlock(code, at("events", openLine, i));
+        out += eventsBlock(code, at("events", openLine, i), openLine);
         continue;
       }
       const label = LANG_LABEL[lang.toLowerCase()] || (lang ? lang.toUpperCase() : "Text");

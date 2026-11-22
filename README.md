@@ -156,6 +156,12 @@ the tile.
   lines and `#` comments are ignored. Nothing else stores them — the fence is an
   ordinary code block, so the file still reads fine in vim or Obsidian, and
   deleting the index loses no events. `/events` starts one, dated today.
+- **The block is editable as a block.** The `⋯` in its bar adds an event (a date
+  and an optional time, then the caret in the page where the title goes) or
+  deletes the whole block; a row's `⋯` sets or changes that event's time, makes
+  it all day, or deletes it. Clicking a row's time opens the same time field.
+  Every one of those is a splice of source lines — setting a time rewrites one
+  line, nothing is stored anywhere else.
 - **The calendar is a column, not a window.** The toolbar's calendar opens a
   month on the right; the page keeps its width while you read it. Days with
   events carry dots (a faint one for an all-day event), the selected day lists
