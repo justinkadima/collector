@@ -361,14 +361,12 @@ export function openCellMenu(cell, point) {
 
 /* ------------------------------------------------------- row/column grips */
 
-// An ellipsis, not a grip: these two open a menu. The six-dot grid in the
-// gutter is the block handle, and it drags.
+// An ellipsis, not a grip: it opens a menu. The six-dot grid in the gutter is
+// the block handle, and it drags.
 const ROW_DOTS =
   '<circle cx="6" cy="12" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="18" cy="12" r="1.7"/>';
-const COL_DOTS =
-  '<circle cx="12" cy="6" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="12" cy="18" r="1.7"/>';
 
-const grips = { row: { el: null, cell: null }, col: { el: null, cell: null } };
+const grips = { row: { el: null, cell: null } };
 let hideTimer = 0;
 
 function ensureGrip(kind) {
@@ -378,8 +376,8 @@ function ensureGrip(kind) {
   el.type = "button";
   el.className = "md-grip md-grip-" + kind;
   el.dataset.opensMenu = "1";
-  el.setAttribute("aria-label", kind === "row" ? "Row actions" : "Column actions");
-  el.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true">' + (kind === "row" ? ROW_DOTS : COL_DOTS) + "</svg>";
+  el.setAttribute("aria-label", "Row actions");
+  el.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true">' + ROW_DOTS + "</svg>";
   el.addEventListener("mousedown", (e) => e.preventDefault());
   el.addEventListener("mouseenter", () => clearTimeout(hideTimer));
   el.addEventListener("mouseleave", scheduleGripHide);
@@ -389,9 +387,9 @@ function ensureGrip(kind) {
     const cell = g.cell;
     if (!cell) return;
     const rect = el.getBoundingClientRect();
-    const point = { x: rect.left, y: rect.bottom + 4 };
-    if (kind === "row") openRowMenu(cell, point);
-    else openColMenu(cell, point);
+    // The header row is a column: its handle opens the column menu, which is
+    // what `openRowMenu` already does for a `th`.
+    openRowMenu(cell, { x: rect.left, y: rect.bottom + 4 });
   });
   document.body.appendChild(el);
   g.el = el;
@@ -409,16 +407,10 @@ function placeGrip(kind, cell) {
   const el = ensureGrip(kind);
   clearTimeout(hideTimer);
   grips[kind].cell = cell;
-  const rect = cell.getBoundingClientRect();
-  if (kind === "row") {
-    const row = cell.parentElement?.getBoundingClientRect();
-    if (!row) return hideGrip(kind);
-    el.style.top = Math.round(row.top + row.height / 2 - 11) + "px";
-    el.style.left = Math.round(Math.max(6, row.left - 26)) + "px";
-  } else {
-    el.style.top = Math.round(Math.max(4, rect.top - 24)) + "px";
-    el.style.left = Math.round(rect.left + rect.width / 2 - 11) + "px";
-  }
+  const row = cell.parentElement?.getBoundingClientRect();
+  if (!row) return hideGrip(kind);
+  el.style.top = Math.round(row.top + row.height / 2 - 11) + "px";
+  el.style.left = Math.round(Math.max(6, row.left - 26)) + "px";
   el.classList.add("on");
   for (const other in grips) if (other !== kind) hideGrip(other);
 }
@@ -427,21 +419,13 @@ export function showRowGrip(cell) {
   placeGrip("row", cell);
 }
 
-export function showColGrip(cell) {
-  placeGrip("col", cell);
-}
-
 export function hideRowGrip() {
   clearTimeout(hideTimer);
   hideGrip("row");
-  hideGrip("col");
 }
 
-/** Hide the handles, but give the pointer time to travel over to one. */
+/** Hide the handle, but give the pointer time to travel over to it. */
 export function scheduleGripHide() {
   clearTimeout(hideTimer);
-  hideTimer = setTimeout(() => {
-    hideGrip("row");
-    hideGrip("col");
-  }, 180);
+  hideTimer = setTimeout(() => hideGrip("row"), 180);
 }

@@ -6,7 +6,6 @@ import {
   startCellEdit,
   openCellMenu,
   showRowGrip,
-  showColGrip,
   hideRowGrip,
   scheduleGripHide,
 } from "./cells.js";
@@ -1125,13 +1124,11 @@ function bindEditor() {
     closeMenu();
     openCellMenu(cell, { x: e.clientX, y: e.clientY });
   });
-  // The Notion-style drag handle: one handle that tracks the hovered row.
+  // One handle that tracks the hovered row — the header row's included, since a
+  // table whose first row has no handle reads as a table whose menu is broken.
   el.preview.addEventListener("mousemove", (e) => {
-    // The header row is a column; body rows are rows.
-    const th = e.target.closest(".md th[data-line]");
-    if (th) return showColGrip(th);
-    const td = e.target.closest(".md td[data-line]");
-    if (td) return showRowGrip(td);
+    const cell = e.target.closest(".md td[data-line], .md th[data-line]");
+    if (cell) return showRowGrip(cell);
     scheduleGripHide();
   });
   el.preview.addEventListener("mouseleave", () => scheduleGripHide());

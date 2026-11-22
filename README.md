@@ -102,12 +102,13 @@ still builds and runs with `-browser`.
   Clicking empty paper always writes where you clicked: between two blocks it
   opens (or makes) the line at that height, under the last block it grows the
   page.
-- Tables have Notion-style menus for rows and columns. Hover a body row for the
-  ellipsis handle on its left, or right-click a cell: insert row above/below,
-  duplicate row, clear contents, delete row. Hover the header for the handle
-  above the column, or right-click a header cell: insert column left/right,
-  clear contents, delete column. Both are filtered by a "Search actions…" box,
-  and both rewrite the markdown rows in place — a table is just text.
+- Tables have Notion-style menus for rows and columns. Hover any row — the
+  header row included — for an ellipsis at its left, or right-click a cell:
+  insert row above/below, duplicate row, clear contents, delete row. The header
+  row's handle opens the column menu, because a header cell *is* the column's
+  label: insert column left/right, clear contents, delete column. Both are
+  filtered by a "Search actions…" box, and both rewrite the markdown rows in
+  place — a table is just text.
 - **Attachments, one syntax.** `/image`, `/video`, `/audio` and `/file` open the
   native file picker, copy the file into `<vault>/attachments/`, and drop a
   page-relative markdown link at the caret: `![screenshot](../attachments/screenshot.png)`.
