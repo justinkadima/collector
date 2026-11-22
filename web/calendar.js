@@ -37,7 +37,6 @@ const addDays = (d, n) => new Date(d.getFullYear(), d.getMonth(), d.getDate() + 
 /* ------------------------------------------------------------------- state */
 
 const state = {
-  open: false,
   month: startOfMonth(new Date()),
   selected: iso(new Date()),
   events: [],
@@ -91,8 +90,15 @@ async function load() {
 
 /* ------------------------------------------------------------------ render */
 
+/** The panel is the truth about whether it is open: a bool kept beside the DOM
+ *  can disagree with it, and then the button that opened the panel cannot close
+ *  it, because it toggles a flag that is already wrong. */
+function isOpen() {
+  return !!root && !root.classList.contains("hidden");
+}
+
 function paint() {
-  if (!root || state.open === false) return;
+  if (!isOpen()) return;
   root.querySelector("#calendar-month").textContent = monthFmt.format(state.month);
   paintGrid();
   paintDay();
@@ -182,12 +188,20 @@ function bind() {
       state.month = startOfMonth(new Date());
       return load();
     }
-    if (e.target.closest("#calendar-close")) return close();
+    if (e.target.closest("#calendar-close")) return closeCalendar();
     const cell = e.target.closest(".cal-cell");
     if (cell) return select(cell.dataset.date, { reveal: true });
     const ev = e.target.closest(".cal-ev");
     if (ev) return hooks.open?.(ev.dataset.path, Number(ev.dataset.line));
     if (e.target.closest("#calendar-add")) return hooks.add?.(state.selected);
+  });
+  // The panel is not modal, so it must never be a trap: Escape closes it, unless
+  // the keystroke belongs to something you are typing in.
+  document.addEventListener("keydown", (e) => {
+    if (e.key !== "Escape" || e.defaultPrevented || !isOpen()) return;
+    const t = e.target;
+    if (t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName))) return;
+    closeCalendar();
   });
 }
 
@@ -218,15 +232,13 @@ export function initCalendar(opts) {
   // The panel is a place you leave open for the day, so it remembers. Start
   // closed and let openCalendar() do the opening, so the first paint has the
   // month's events instead of an empty grid.
-  state.open = false;
   const was = localStorage.getItem("collector-calendar") ?? localStorage.getItem("not1-calendar");
   if (was === "1") openCalendar();
 }
 
 export function openCalendar() {
   if (!root) return;
-  const was = state.open;
-  state.open = true;
+  const was = isOpen();
   localStorage.setItem("collector-calendar", "1");
   root.classList.remove("hidden");
   document.body.classList.add("calendar-open");
@@ -237,7 +249,6 @@ export function openCalendar() {
 
 export function closeCalendar() {
   if (!root) return;
-  state.open = false;
   localStorage.setItem("collector-calendar", "0");
   root.classList.add("hidden");
   document.body.classList.remove("calendar-open");
@@ -245,18 +256,18 @@ export function closeCalendar() {
 }
 
 export function toggleCalendar(force) {
-  const want = force == null ? !state.open : !!force;
+  const want = force == null ? !isOpen() : !!force;
   if (want) openCalendar();
   else closeCalendar();
 }
 
 export function calendarOpen() {
-  return state.open;
+  return isOpen();
 }
 
 /** Re-read the month: called after a save, since a page write can move events. */
 export function refreshCalendar() {
-  if (state.open) load();
+  if (isOpen()) load();
 }
 
 /** Jump the panel to a day, e.g. from a link in a page. */

@@ -1288,6 +1288,19 @@ function handlePopupKeys(e) {
 /* --------------------------------------------------------------- slash UI */
 
 const SLASH_ITEMS = [
+  {
+    key: "text",
+    label: "Text",
+    desc: "A block of text, line breaks and all",
+    icon: "¶",
+    // A text block is a paragraph, and a paragraph is a run of non-blank lines:
+    // Enter inside one keeps the line in the block, so a long text or a paste
+    // from another document is one block rather than one block per line. A
+    // blank line still ends it — that is what a blank line means in markdown.
+    block: true,
+    template: "",
+    match: ["text", "paragraph", "para", "body", "prose", "plain", "p"],
+  },
   { key: "h1", label: "Heading 1", desc: "Title", icon: "H1", template: "# ", match: ["h1", "heading", "title", "#"] },
   { key: "h2", label: "Heading 2", desc: "Section", icon: "H2", template: "## ", match: ["h2", "heading", "##"] },
   { key: "h3", label: "Heading 3", desc: "Subsection", icon: "H3", template: "### ", match: ["h3", "heading", "###"] },

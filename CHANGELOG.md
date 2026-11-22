@@ -6,6 +6,25 @@ tags; the app prints the same number with `collector -version`.
 Nothing here has ever rewritten a page it wasn't asked to. When a release
 changes the markdown grammar it says so, and the old shape keeps working.
 
+## 0.7.3 — 2026-11-22
+
+**Files:** nothing moves. A blank line still means what it has always meant:
+a new block.
+
+- `/text` inserts a text block. Line breaks stay inside it, so a long note or a
+  paste from another document is one block rather than one block per line; only
+  an empty line ends it. `Enter` inside a block keeps the line in that block,
+  `Enter` at the end of one starts the next.
+- Closing the calendar works: the `X` in its header was calling the browser's
+  `window.close()`, which does nothing, and the toolbar button could stop
+  toggling the panel off. The panel's own visibility is now the only state, and
+  `Esc` closes it too (except while you are typing).
+- A block written on an empty line under a paragraph used to join that
+  paragraph — one paragraph, two lines — because in markdown a run of non-blank
+  lines *is* a paragraph. The empty line it needs is now written with it, so
+  `Enter` at the end of a paragraph, or a click on the paper below one, really
+  does start a new block.
+
 ## 0.7.2 — 2026-11-22
 
 **Files:** nothing moves.

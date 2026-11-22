@@ -136,8 +136,12 @@ the tile.
   same picker.
 - `⌘P` searches everything (SQLite FTS5) with highlighted snippets, or creates a
   page when nothing matches.
-- `/` at the start of a line inserts headings, lists, to-dos, quotes, callouts,
-  code, dividers, tables.
+- `/` at the start of a line inserts text, headings, lists, to-dos, quotes,
+  callouts, code, dividers, tables. `/text` is a plain text block: the line
+  breaks you type or paste stay inside it, so a long note or a document pasted
+  from somewhere else is one block rather than one block per line. An empty line
+  still ends it — that is what an empty line means in markdown, and it is why
+  the file stays readable in any other editor.
 - A markdown table renders as an even grid with hairline borders, and its cells
   edit in place: click one, type, and the text is spliced back into the row of
   the `.md` file. `Enter` saves and drops a row, `Tab`/`Shift-Tab` save and move

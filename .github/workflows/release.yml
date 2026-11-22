@@ -135,5 +135,9 @@ jobs:
           else
             gh release create "$GITHUB_REF_NAME" dist/* \
               --title "Collector ${GITHUB_REF_NAME#v}" \
+              --latest \
               --generate-notes
           fi
+          # A draft is not a download. Re-tagging flips an existing release back to
+          # draft, so the state is asserted every run rather than assumed.
+          gh release edit "$GITHUB_REF_NAME" --draft=false --latest

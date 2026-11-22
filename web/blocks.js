@@ -131,6 +131,16 @@ function offsetIn(src, line, col) {
 
 const css = (node, prop) => getComputedStyle(node).getPropertyValue(prop);
 
+/** A line of prose: text a paragraph would swallow if it came next. */
+const isProse = (line) =>
+  !!line.trim() &&
+  !LIST_LINE.test(line) &&
+  !/^\s{0,3}>/.test(line) &&
+  !/^#{1,6}\s/.test(line) &&
+  !/^\s*(?:`{3,}|~{3,})/.test(line) &&
+  !/^\s*\|/.test(line) &&
+  !/^\s*(?:-{3,}|\*{3,}|_{3,})\s*$/.test(line);
+
 /** Index of the previous non-blank line, or null at the top of the page. */
 function previousLine(lines, from) {
   for (let i = from - 1; i >= 0; i--) if (lines[i].trim()) return i;
@@ -290,10 +300,18 @@ export function initBlocks(opts) {
   /** Write the overlay's text back into the block's lines. */
   function onInput() {
     if (!edit) return;
-    const { ta, kind, meta, start, end } = edit;
+    const { ta, kind, meta } = edit;
     const text = add(kind, meta, ta.value);
     const lines = (body() || "").split("\n");
     const blockLines = text === "" ? [""] : text.split("\n");
+    // A block being started on a blank line: it needs blank lines around it, or
+    // the text would simply continue the paragraph it was written under — or
+    // swallow the one below — and the new block would not be new at all.
+    if (edit.ghost && text.trim()) {
+      edit.start = openRoom(lines, edit.start);
+      edit.end = edit.start + 1;
+    }
+    const { start, end } = edit;
     const next = [...lines.slice(0, start), ...blockLines, ...lines.slice(end)].join("\n");
     // Where the caret is in the new body: the overlay's line, plus what the
     // marker we stripped off put back in front of it.
@@ -599,6 +617,23 @@ export function initBlocks(opts) {
     const off = line > 0 ? 0 : Math.max(0, col - prefixLen(kind, meta, idx));
     startEdit(unit, idx === 0 ? off : null, point);
     return true;
+  }
+
+  /**
+   * Where a new block can be written at `line`: the last blank line of the run,
+   * with a blank line above it. A paragraph is a run of non-blank lines, so a
+   * line written straight under one joins it — and a block that joins the block
+   * above is not a block.
+   */
+  function openRoom(lines, line) {
+    const blank = (i) => lines[i] !== undefined && !lines[i].trim();
+    while (blank(line + 1)) line++;
+    if (line > 0 && isProse(lines[line - 1] || "")) {
+      lines.splice(line, 0, "");
+      line++;
+    }
+    if (isProse(lines[line + 1] || "")) lines.splice(line + 1, 0, "");
+    return line;
   }
 
   /** A blank line has no element; make a stand-in so there is something to type in. */
