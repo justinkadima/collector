@@ -17,7 +17,7 @@ import (
 	"strings"
 	"time"
 
-	"not1/internal/vault"
+	"collector/internal/vault"
 )
 
 // maxInline is the size above which an attachment is linked by absolute path
@@ -215,7 +215,7 @@ body.export { background: var(--bg); }
 
 // renderDoc produces one self-contained HTML file: the app's stylesheet inline,
 // attachments as data URIs, and internal links flattened to plain text (there is
-// no app to navigate to outside not1).
+// no app to navigate to outside collector).
 func (s *Server) renderDoc(v *vault.Vault, in exportReq, title string) string {
 	body := inlineAssets(in.HTML, v)
 	body = stripInternalLinks(body)
@@ -258,7 +258,7 @@ func (s *Server) renderDoc(v *vault.Vault, in exportReq, title string) string {
 	b.WriteString("<!doctype html>\n<html lang=\"en\" class=\"export\">\n<head>\n")
 	b.WriteString("<meta charset=\"utf-8\">\n")
 	b.WriteString("<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n")
-	b.WriteString("<meta name=\"generator\" content=\"not1\">\n")
+	b.WriteString("<meta name=\"generator\" content=\"Collector\">\n")
 	b.WriteString("<title>" + htmlEsc(title) + "</title>\n")
 	b.WriteString("<style>\n")
 	b.WriteString(s.appCSS())
@@ -272,15 +272,15 @@ func (s *Server) renderDoc(v *vault.Vault, in exportReq, title string) string {
 	b.WriteString(tags)
 	b.WriteString("</header>\n<article class=\"md\">\n")
 	b.WriteString(body)
-	b.WriteString("\n</article>\n<footer class=\"doc-foot\">Exported from not1 · ")
+	b.WriteString("\n</article>\n<footer class=\"doc-foot\">Exported from Collector · ")
 	b.WriteString(time.Now().Format("2 January 2006"))
 	b.WriteString("</footer>\n</main>\n</body>\n</html>\n")
 	return b.String()
 }
 
-var assetAttr = regexp.MustCompile(`(src|href)="not1-asset:([^"]*)"`)
+var assetAttr = regexp.MustCompile(`(src|href)="collector-asset:([^"]*)"`)
 
-// inlineAssets replaces the not1-asset: placeholders the renderer emits with
+// inlineAssets replaces the collector-asset: placeholders the renderer emits with
 // data URIs (small files) or absolute file:// links (large ones).
 func inlineAssets(html string, v *vault.Vault) string {
 	return assetAttr.ReplaceAllStringFunc(html, func(m string) string {
@@ -425,7 +425,7 @@ func pickSavePath(defaultName, prompt string) (string, bool, error) {
 // click away — better than a button that just fails.
 func writePDF(doc, dst, title string) error {
 	if browser := findChrome(); browser != "" {
-		tmp, err := os.CreateTemp("", "not1-export-*.html")
+		tmp, err := os.CreateTemp("", "collector-export-*.html")
 		if err != nil {
 			return err
 		}
@@ -437,7 +437,7 @@ func writePDF(doc, dst, title string) error {
 		}
 		tmp.Close()
 
-		prof, err := os.MkdirTemp("", "not1-chrome-*")
+		prof, err := os.MkdirTemp("", "collector-chrome-*")
 		if err == nil {
 			defer os.RemoveAll(prof)
 		}

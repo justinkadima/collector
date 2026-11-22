@@ -23,7 +23,7 @@ package vault
 //	owner: Justin
 //	---
 //
-// This keeps the promise of the app: delete .not1/ and every database is still
+// This keeps the promise of the app: delete .collector/ and every database is still
 // a folder plus a text file that says how to look at it.
 
 import (

@@ -26,7 +26,7 @@ var (
 
 // Directories never shown in the tree or indexed.
 var ignoredDirs = map[string]bool{
-	".not1": true, ".git": true, ".obsidian": true, ".trash": true,
+	".collector": true, ".not1": true, ".git": true, ".obsidian": true, ".trash": true,
 	"node_modules": true, ".idea": true, ".vscode": true, "__pycache__": true,
 }
 
@@ -70,7 +70,9 @@ func New(root string) (*Vault, error) {
 	if !st.IsDir() {
 		return nil, fmt.Errorf("%s is not a directory", abs)
 	}
-	return &Vault{root: abs}, nil
+	v := &Vault{root: abs}
+	v.adoptLegacyMeta()
+	return v, nil
 }
 
 func (v *Vault) Root() string { return v.root }
@@ -80,8 +82,22 @@ func (v *Vault) Root() string { return v.root }
 // sits next to the file icons. Nothing writes it into frontmatter.
 const DatabaseIcon = "▦"
 
+// adoptLegacyMeta renames a .not1 folder from before the app was called
+// Collector. The index in it is disposable, but the trash is not: a rename
+// keeps every deleted page where it was.
+func (v *Vault) adoptLegacyMeta() {
+	dir := v.MetaDir()
+	if _, err := os.Stat(dir); err == nil {
+		return
+	}
+	if _, err := os.Stat(filepath.Join(v.root, ".not1")); err != nil {
+		return
+	}
+	_ = os.Rename(filepath.Join(v.root, ".not1"), dir)
+}
+
 // MetaDir holds the per-vault cache. Hidden so other tools ignore it.
-func (v *Vault) MetaDir() string { return filepath.Join(v.root, ".not1") }
+func (v *Vault) MetaDir() string { return filepath.Join(v.root, ".collector") }
 
 func (v *Vault) IndexPath() string { return filepath.Join(v.MetaDir(), "index.db") }
 
@@ -312,7 +328,7 @@ func (v *Vault) writeAtomic(abs, content string) error {
 	if err := os.MkdirAll(filepath.Dir(abs), 0o755); err != nil {
 		return err
 	}
-	tmp, err := os.CreateTemp(filepath.Dir(abs), ".not1-*.tmp")
+	tmp, err := os.CreateTemp(filepath.Dir(abs), ".collector-*.tmp")
 	if err != nil {
 		return err
 	}

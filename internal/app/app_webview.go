@@ -21,7 +21,7 @@ func Run(url, title string, debug bool, icon []byte) error {
 	w.SetSize(1280, 860, webview.HintNone)
 
 	// The page title lives in the frontend; mirror it into the window chrome.
-	_ = w.Bind("not1SetTitle", func(s string) string {
+	_ = w.Bind("collectorSetTitle", func(s string) string {
 		w.Dispatch(func() { w.SetTitle(s) })
 		return ""
 	})

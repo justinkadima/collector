@@ -219,14 +219,15 @@ export function initCalendar(opts) {
   // closed and let openCalendar() do the opening, so the first paint has the
   // month's events instead of an empty grid.
   state.open = false;
-  if (localStorage.getItem("not1-calendar") === "1") openCalendar();
+  const was = localStorage.getItem("collector-calendar") ?? localStorage.getItem("not1-calendar");
+  if (was === "1") openCalendar();
 }
 
 export function openCalendar() {
   if (!root) return;
   const was = state.open;
   state.open = true;
-  localStorage.setItem("not1-calendar", "1");
+  localStorage.setItem("collector-calendar", "1");
   root.classList.remove("hidden");
   document.body.classList.add("calendar-open");
   document.getElementById("calendar-btn")?.classList.add("on");
@@ -237,7 +238,7 @@ export function openCalendar() {
 export function closeCalendar() {
   if (!root) return;
   state.open = false;
-  localStorage.setItem("not1-calendar", "0");
+  localStorage.setItem("collector-calendar", "0");
   root.classList.add("hidden");
   document.body.classList.remove("calendar-open");
   document.getElementById("calendar-btn")?.classList.remove("on");

@@ -23,9 +23,9 @@ import (
 
 	"github.com/fsnotify/fsnotify"
 
-	"not1/internal/config"
-	"not1/internal/index"
-	"not1/internal/vault"
+	"collector/internal/config"
+	"collector/internal/index"
+	"collector/internal/vault"
 )
 
 type Server struct {
@@ -162,7 +162,7 @@ func withLogging(next http.Handler) http.Handler {
 
 func (s *Server) requireToken(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		tok := r.Header.Get("X-Not1-Token")
+		tok := r.Header.Get("X-Collector-Token")
 		if tok == "" {
 			tok = r.URL.Query().Get("t")
 		}
@@ -335,7 +335,7 @@ func addRecursive(w *fsnotify.Watcher, root string) error {
 
 func ignoredDir(name string) bool {
 	switch name {
-	case ".not1", ".git", ".obsidian", ".trash", "node_modules", ".idea", ".vscode", "__pycache__":
+	case ".collector", ".not1", ".git", ".obsidian", ".trash", "node_modules", ".idea", ".vscode", "__pycache__":
 		return true
 	}
 	return false
@@ -567,7 +567,7 @@ func pickFolder() (string, bool, error) {
 	switch runtime.GOOS {
 	case "darwin":
 		out, err := exec.Command("osascript", "-e",
-			`POSIX path of (choose folder with prompt "Choose a folder to open as a not1 workspace")`).Output()
+			`POSIX path of (choose folder with prompt "Choose a folder to open as a collector workspace")`).Output()
 		if err != nil {
 			return "", true, nil // user cancelled
 		}

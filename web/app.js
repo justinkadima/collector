@@ -140,7 +140,7 @@ function pageGlyph(ic) {
 
 async function init() {
   cacheEls();
-  applyTheme(localStorage.getItem("not1-theme") || "light");
+  applyTheme(localStorage.getItem("collector-theme") || localStorage.getItem("not1-theme") || "light");
   bindChrome();
   bindEditor();
   bindShortcuts();
@@ -179,7 +179,7 @@ function cacheEls() {
 function applyTheme(theme) {
   state.theme = theme === "dark" ? "dark" : "light";
   document.documentElement.dataset.theme = state.theme;
-  localStorage.setItem("not1-theme", state.theme);
+  localStorage.setItem("collector-theme", state.theme);
   const btn = $("#theme-btn");
   if (btn) {
     btn.innerHTML = icon(state.theme === "dark" ? "sun" : "moon");
@@ -203,7 +203,7 @@ function onWorkspaceData(data) {
   state.pageCount = data.pageCount || 0;
   if (data.sidebarWidth) setSidebarWidth(data.sidebarWidth, false);
   applyTheme(state.theme);
-  $("#ws-name").textContent = state.workspace ? baseName(state.workspace) : "not1";
+  $("#ws-name").textContent = state.workspace ? baseName(state.workspace) : "Collector";
   $("#ws-avatar").textContent = state.workspace ? baseName(state.workspace).slice(0, 1).toUpperCase() : "n";
   $("#page-count").textContent = state.pageCount ? `${state.pageCount} page${state.pageCount === 1 ? "" : "s"}` : "";
 
@@ -231,10 +231,10 @@ function hashPath() {
 /* -------------------------------------------------------------- workspace */
 
 function setTitle(title) {
-  document.title = title ? `${title} — not1` : "not1";
-  if (typeof window.not1SetTitle === "function") {
+  document.title = title ? `${title} — Collector` : "Collector";
+  if (typeof window.collectorSetTitle === "function") {
     try {
-      Promise.resolve(window.not1SetTitle(document.title)).catch(() => {});
+      Promise.resolve(window.collectorSetTitle(document.title)).catch(() => {});
     } catch (_) {}
   }
 }
@@ -255,12 +255,12 @@ function showWelcome() {
   w.innerHTML = `
     <div class="logo">n</div>
     <h1>Your notes, as files.</h1>
-    <p>not1 is a quiet home for a folder of markdown on your disk.<br/>No lock-in, no sync, no accounts.</p>
+    <p>Collector is a quiet home for a folder of markdown on your disk.<br/>No lock-in, no sync, no accounts.</p>
     <div class="open-row">
       <button class="btn-primary" id="open-folder">Open a folder…</button>
       <input class="path-input" id="ws-path" placeholder="or paste a path, e.g. ~/Notes" spellcheck="false" />
     </div>
-    <p class="hint">Markdown stays readable in any editor. Search, links and backlinks<br/>are indexed locally in <code>.not1/</code>.</p>
+    <p class="hint">Markdown stays readable in any editor. Search, links and backlinks<br/>are indexed locally in <code>.collector/</code>.</p>
     ${
       recents.length
         ? `<div class="recent"><h4>Recent folders</h4>${recents
@@ -359,14 +359,14 @@ async function openWorkspace(path) {
 
 function loadExpanded() {
   try {
-    const raw = localStorage.getItem("not1-expanded:" + state.workspace);
+    const raw = localStorage.getItem("collector-expanded:" + state.workspace);
     state.expanded = new Set(raw ? JSON.parse(raw) : []);
   } catch {
     state.expanded = new Set();
   }
 }
 function saveExpanded() {
-  localStorage.setItem("not1-expanded:" + state.workspace, JSON.stringify([...state.expanded]));
+  localStorage.setItem("collector-expanded:" + state.workspace, JSON.stringify([...state.expanded]));
 }
 
 function indexTitles() {
@@ -912,7 +912,7 @@ function bindChrome() {
   el.tree.addEventListener("dragstart", (e) => {
     const row = e.target.closest(".tree-row");
     if (!row) return;
-    e.dataTransfer.setData("text/not1-path", row.dataset.path);
+    e.dataTransfer.setData("text/collector-path", row.dataset.path);
     e.dataTransfer.effectAllowed = "move";
   });
   const isDropRow = (t) => {
@@ -935,7 +935,7 @@ function bindChrome() {
     if (!row) return;
     e.preventDefault();
     row.classList.remove("drop-target");
-    const src = e.dataTransfer.getData("text/not1-path");
+    const src = e.dataTransfer.getData("text/collector-path");
     if (!src) return;
     try {
       const res = await api("/api/move", { method: "POST", body: { path: src, dir: row.dataset.path } });
@@ -1035,7 +1035,7 @@ function bindChrome() {
 function setSidebar(open) {
   document.body.classList.toggle("sidebar-hidden", !open);
   $("#show-sidebar").classList.toggle("hidden", open);
-  localStorage.setItem("not1-sidebar", open ? "1" : "0");
+  localStorage.setItem("collector-sidebar", open ? "1" : "0");
 }
 
 function setSidebarWidth(w, persist = true) {
@@ -1673,7 +1673,7 @@ async function dropFiles(files, target) {
     try {
       const res = await fetch(`/api/upload?${qs}`, {
         method: "POST",
-        headers: { "X-Not1-Token": TOKEN },
+        headers: { "X-Collector-Token": TOKEN },
         body: file,
       });
       const data = await res.json();
@@ -1693,7 +1693,7 @@ async function dropFiles(files, target) {
 function exportCtx() {
   return {
     hasTitle: (t) => state.knownTitles.has(t.trim().toLowerCase()),
-    fileUrl: (rel) => "not1-asset:" + resolveRel(dirOf(state.page?.path || ""), rel),
+    fileUrl: (rel) => "collector-asset:" + resolveRel(dirOf(state.page?.path || ""), rel),
   };
 }
 
@@ -2064,8 +2064,8 @@ async function deletePath(path, isDir) {
   const ok = await confirmDialog({
     title: isDir ? "Delete folder?" : "Move page to trash?",
     message: isDir
-      ? `“${baseName(path)}” and everything inside will be moved to .not1/trash.`
-      : `“${titleOf(path)}” will be moved to .not1/trash, so nothing is lost.`,
+      ? `“${baseName(path)}” and everything inside will be moved to .collector/trash.`
+      : `“${titleOf(path)}” will be moved to .collector/trash, so nothing is lost.`,
     confirm: "Delete",
     danger: true,
   });
@@ -2736,12 +2736,12 @@ async function addEventDialog(date) {
 /* ----------------------------------------------------------------- boot */
 
 function initSidebarState() {
-  const hidden = localStorage.getItem("not1-sidebar") === "0";
+  const hidden = localStorage.getItem("collector-sidebar") === "0" || localStorage.getItem("not1-sidebar") === "0";
   setSidebar(!hidden);
 }
 
 // Handy for debugging from the devtools console.
-window.not1 = { state, openPage, refreshTree, savePage, blocks: () => blocks };
+window.collector = { state, openPage, refreshTree, savePage, blocks: () => blocks };
 
 document.addEventListener("DOMContentLoaded", () => {
   initSidebarState();

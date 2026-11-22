@@ -1,4 +1,4 @@
-module not1
+module collector
 
 go 1.25.0
 

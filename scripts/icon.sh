@@ -1,9 +1,9 @@
 #!/bin/bash
 # Turn assets/icon.svg into the two files the app actually uses:
 #
-#   assets/not1.icns      what Finder, the Dock and Spotlight read out of the
+#   assets/collector.icns      what Finder, the Dock and Spotlight read out of the
 #                         .app bundle that scripts/bundle.sh assembles
-#   assets/not1-512.png   embedded in the binary, so a plain ./not1 shows the
+#   assets/collector-512.png   embedded in the binary, so a plain ./collector shows the
 #                         same icon in the Dock as the bundle does in Finder
 #
 # The drawing has to keep its transparent corners: the Dock draws an app icon
@@ -27,7 +27,7 @@ find_chromium() {
 }
 
 chrome=$(find_chromium) || {
-	echo "icon.sh: no Chromium found; install one, or leave assets/not1.icns and assets/not1-512.png alone" >&2
+	echo "icon.sh: no Chromium found; install one, or leave assets/collector.icns and assets/collector-512.png alone" >&2
 	exit 1
 }
 
@@ -87,16 +87,16 @@ PY
 
 sips -z 1024 1024 "$tmp/master.png" --out "$tmp/square.png" >/dev/null
 
-set="$tmp/not1.iconset"
+set="$tmp/collector.iconset"
 mkdir -p "$set"
 for size in 16 32 128 256 512; do
 	sips -z "$size" "$size" "$tmp/square.png" --out "$set/icon_${size}x${size}.png" >/dev/null
 	sips -z "$((size * 2))" "$((size * 2))" "$tmp/square.png" --out "$set/icon_${size}x${size}@2x.png" >/dev/null
 done
-sips -z 512 512 "$tmp/square.png" --out assets/not1-512.png >/dev/null
-cp "$tmp/square.png" assets/not1-1024.png
-iconutil -c icns "$set" -o assets/not1.icns
+sips -z 512 512 "$tmp/square.png" --out assets/collector-512.png >/dev/null
+cp "$tmp/square.png" assets/collector-1024.png
+iconutil -c icns "$set" -o assets/collector.icns
 
-echo "assets/not1.icns"
-echo "assets/not1-512.png"
-echo "assets/not1-1024.png"
+echo "assets/collector.icns"
+echo "assets/collector-512.png"
+echo "assets/collector-1024.png"

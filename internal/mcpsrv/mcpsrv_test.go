@@ -10,8 +10,8 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
-	"not1/internal/index"
-	"not1/internal/vault"
+	"collector/internal/index"
+	"collector/internal/vault"
 )
 
 func fixture(t *testing.T) (*vault.Vault, *index.Index) {
@@ -257,10 +257,10 @@ func TestCreateAndDelete(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(v.Root(), "Projects/Meeting notes.md")); !os.IsNotExist(err) {
 		t.Error("page still on disk after delete")
 	}
-	trash := filepath.Join(v.Root(), ".not1", "trash")
+	trash := filepath.Join(v.Root(), ".collector", "trash")
 	entries, _ := os.ReadDir(trash)
 	if len(entries) == 0 {
-		t.Error("delete should move the file to .not1/trash, not unlink it")
+		t.Error("delete should move the file to .collector/trash, not unlink it")
 	}
 	_, hits, _ = call(t, cs, "search_pages", map[string]any{"query": "Agenda"})
 	if strings.Contains(hits, "Meeting notes") {

@@ -5,11 +5,11 @@ package app
 /*
 #cgo LDFLAGS: -framework Cocoa
 #include <stdlib.h>
-void not1SetDockIcon(void *bytes, int len);
+void collectorSetDockIcon(void *bytes, int len);
 */
 import "C"
 
-// setDockIcon hands the icon to AppKit so a plain `not1` binary looks like the
+// setDockIcon hands the icon to AppKit so a plain `collector` binary looks like the
 // app it is. Called on the main thread, which is where Run() lives.
 func setDockIcon(png []byte) {
 	if len(png) == 0 {
@@ -17,5 +17,5 @@ func setDockIcon(png []byte) {
 	}
 	buf := C.CBytes(png)
 	defer C.free(buf)
-	C.not1SetDockIcon(buf, C.int(len(png)))
+	C.collectorSetDockIcon(buf, C.int(len(png)))
 }

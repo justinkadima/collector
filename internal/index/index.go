@@ -10,7 +10,7 @@ import (
 	"time"
 	"unicode"
 
-	"not1/internal/vault"
+	"collector/internal/vault"
 
 	_ "modernc.org/sqlite"
 )

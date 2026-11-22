@@ -1,4 +1,4 @@
-// A small, dependency-free markdown renderer covering the subset not1 uses.
+// A small, dependency-free markdown renderer covering the subset collector uses.
 // Everything is escaped; raw HTML in notes is shown as text (safer, and keeps
 // files portable).
 

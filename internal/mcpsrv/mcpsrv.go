@@ -18,8 +18,8 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
-	"not1/internal/index"
-	"not1/internal/vault"
+	"collector/internal/index"
+	"collector/internal/vault"
 )
 
 // Version is the version reported to MCP clients.
@@ -32,7 +32,7 @@ type server struct {
 
 // Sync rebuilds the index from the vault. It runs once at startup because the
 // index is a cache: the vault may have been edited by an editor or synced from
-// another machine while not1 was closed, and search must not lie about it.
+// another machine while collector was closed, and search must not lie about it.
 func Sync(v *vault.Vault, ix *index.Index) error {
 	pages, err := v.AllPages()
 	if err != nil {
@@ -45,7 +45,7 @@ func Sync(v *vault.Vault, ix *index.Index) error {
 func New(v *vault.Vault, ix *index.Index) *mcp.Server {
 	s := &server{v: v, ix: ix}
 	srv := mcp.NewServer(&mcp.Implementation{
-		Name:    "not1",
+		Name:    "collector",
 		Version: Version,
 	}, &mcp.ServerOptions{
 		Instructions: "This server is a markdown notes vault. One page is one .md file; " +
@@ -101,7 +101,7 @@ func New(v *vault.Vault, ix *index.Index) *mcp.Server {
 
 	mcp.AddTool(srv, &mcp.Tool{
 		Name: "delete_page",
-		Description: "Move a page to the vault's trash folder (<vault>/.not1/trash/). Nothing is " +
+		Description: "Move a page to the vault's trash folder (<vault>/.collector/trash/). Nothing is " +
 			"ever unlinked, so this is recoverable.",
 	}, s.deletePage)
 

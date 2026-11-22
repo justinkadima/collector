@@ -1,4 +1,4 @@
-# not1
+# Collector
 
 A Notion-shaped notes app that is really just a folder of markdown files.
 
@@ -9,10 +9,10 @@ page, the file is renamed. When you edit a page, the file is written. If you
 delete the app, your notes are still there, unchanged.
 
 ```
-go build -o not1 .
-./not1                 # opens the last workspace in a native window
-./not1 -w ~/Notes      # or a specific folder
-./not1 -browser        # run as a local web app instead of a window
+go build -o collector .
+./collector             # opens the last workspace in a native window
+./collector -w ~/Notes  # or a specific folder
+./collector -browser    # run as a local web app instead of a window
 ```
 
 Requires Go 1.22+ and, for the native window, CGO. On macOS the window is
@@ -23,16 +23,16 @@ On macOS there is also a bundle, which is what Finder, the Dock, Spotlight and
 the window's menu bar like best:
 
 ```
-./scripts/bundle.sh           # dist/not1.app
+./scripts/bundle.sh           # dist/Collector.app
 ./scripts/bundle.sh --run     # …and open it
 ```
 
-`./not1` on its own is already a normal app window; the bundle only adds the
-things a loose executable cannot have — a name in the menu bar, an icon Finder
-can read, and something double-clickable. The icon itself is one SVG
+`./collector` on its own is already a normal app window; the bundle only adds
+the things a loose executable cannot have — a name in the menu bar, an icon
+Finder can read, and something double-clickable. The icon itself is one SVG
 (`assets/icon.svg`): an ink tile, a page you own, and one block in the accent
-blue. `scripts/icon.sh` turns it into `assets/not1.icns` (for the bundle) and
-`assets/not1-512.png` (embedded in the binary, so the loose executable hands the
+blue. `scripts/icon.sh` turns it into `assets/collector.icns` (for the bundle) and
+`assets/collector-512.png` (embedded in the binary, so the loose executable hands the
 same drawing to `NSApplication` and the Dock tile matches). Both outputs are
 checked in; the script only needs a Chromium when the drawing changes, because
 QuickLook flattens SVG onto white and a matte would show up as a square around
@@ -43,7 +43,7 @@ the tile.
 - **Markdown is the source of truth.** The app never keeps a copy of your text
   anywhere else.
 - **One page = one `.md` file.** Nested folders in the vault become nested
-  folders in the sidebar, hidden folders (`.git`, `.not1`) excluded.
+  folders in the sidebar, hidden folders (`.git`, `.collector`) excluded.
 - **The filename is the title.** Renaming a page renames the file; the title is
   never stored separately, so the tree can't drift away from what's on disk.
 - **Metadata lives in frontmatter**, and only the keys that exist are written:
@@ -59,10 +59,10 @@ the tile.
   `created` and `updated` are added on first write and maintained afterwards.
   Strip everything between the fences and the page is plain markdown again.
 - **Index is disposable.** Search, backlinks and the page list come from
-  `<vault>/.not1/index.db` (SQLite + FTS5). Delete that folder and everything is
+  `<vault>/.collector/index.db` (SQLite + FTS5). Delete that folder and everything is
   rebuilt by walking the vault. Nothing is lost.
 - **Delete is a move, not an unlink.** Removed pages and folders go to
-  `<vault>/.not1/trash/<timestamp>/`.
+  `<vault>/.collector/trash/<timestamp>/`.
 - **Attachments are ordinary files** in `<vault>/attachments/`, referenced by a
   page-relative markdown link. The app copies a file in once and never again;
   delete the link and the file is still yours to keep or delete.
@@ -193,7 +193,7 @@ the tile.
 - Light/dark theme, resizable and collapsible sidebar, both remembered.
 - Databases: table, board and list views over a folder of pages (below).
 - **The same vault over MCP**, so an agent can search and edit your notes
-  (below): `not1 mcp -w ~/Notes`.
+  (below): `collector mcp -w ~/Notes`.
 
 ## Databases
 
@@ -236,7 +236,7 @@ Where the work lives.
   the view.
 - **The page body is the database's description**, rendered above the view and
   edited by clicking it.
-- **Delete a row and the file goes to `.not1/trash/`**, never away.
+- **Delete a row and the file goes to `.collector/trash/`**, never away.
 - **Cells edit in place.** Click a cell and it becomes an input: `Enter` saves
   and drops a row, `Tab` saves and moves right, `Esc` puts the old value back,
   clicking elsewhere saves. Arrow keys walk the grid, typing on a cell replaces
@@ -248,7 +248,7 @@ Where the work lives.
 
 ## Agents: the MCP server
 
-`not1 mcp -w ~/Notes` speaks the Model Context Protocol on stdin/stdout, so an
+`collector mcp -w ~/Notes` speaks the Model Context Protocol on stdin/stdout, so an
 agent — Claude Desktop, Claude Code, anything MCP-capable — can search, read and
 write the same vault you have open. Same files, same frontmatter, no second
 store: a tool call is a normal page write, and the app's file watcher picks it up
@@ -263,7 +263,7 @@ in about a second.
 | `create_page` | new page from a title (+ optional body, icon, folder) |
 | `append_to_page` | add markdown at the end — cannot overwrite |
 | `update_page` | replace body and/or title, icon, tags |
-| `delete_page` | move to `.not1/trash/` |
+| `delete_page` | move to `.collector/trash/` |
 | `query_database` | a database page as typed fields and rows |
 
 Two things keep agents honest, both borrowed from the app itself:
@@ -283,8 +283,8 @@ Point a client at it:
 ```json
 {
   "mcpServers": {
-    "not1": {
-      "command": "/Users/you/bin/not1",
+    "collector": {
+      "command": "/Users/you/bin/collector",
       "args": ["mcp", "-w", "/Users/you/Notes"]
     }
   }
@@ -315,13 +315,13 @@ internal/config         app settings (last workspace, theme) — never vault dat
 internal/vault          the filesystem: read/parse/write/move/delete + frontmatter
 internal/index          SQLite FTS5 index, backlinks, snippets (rebuildable)
 internal/server         HTTP API + SSE file watcher
-internal/mcpsrv         the same vault over MCP, for agents (not1 mcp)
+internal/mcpsrv         the same vault over MCP, for agents (collector mcp)
 internal/app            native window (webview_go) and stub for CGO-less builds
 web/                    the UI: no framework, no build step, ES modules
 ```
 
 `scripts/` holds the two macOS chores: `icon.sh` (SVG → PNG + ICNS) and
-`bundle.sh` (build → `dist/not1.app`).
+`bundle.sh` (build → `dist/Collector.app`).
 
 The API is small and local: bootstrap, tree, page read/write (with `expectMod`
 for conflicts), rename, move, delete, search, resolve, database read/view/cell

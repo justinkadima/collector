@@ -6,7 +6,7 @@ import (
 	"time"
 )
 
-// Meta is the YAML frontmatter subset not1 understands. Unknown keys are kept
+// Meta is the YAML frontmatter subset collector understands. Unknown keys are kept
 // verbatim so files round-trip cleanly through other tools (Obsidian, etc).
 type Meta struct {
 	Icon    string
@@ -71,7 +71,7 @@ func splitFrontmatter(src string) (Meta, string) {
 		case "updated", "modified":
 			m.Updated = parseTime(val)
 		case "title":
-			// Filenames are canonical in not1; keep the key so other tools
+			// Filenames are canonical in collector; keep the key so other tools
 			// still see it, but do not let it override the file name.
 			m.Extra = append(m.Extra, ln)
 		default:

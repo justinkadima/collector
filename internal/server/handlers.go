@@ -8,9 +8,9 @@ import (
 	"strings"
 	"time"
 
-	"not1/internal/config"
-	"not1/internal/index"
-	"not1/internal/vault"
+	"collector/internal/config"
+	"collector/internal/index"
+	"collector/internal/vault"
 )
 
 func (s *Server) handleBootstrap(w http.ResponseWriter, r *http.Request) {

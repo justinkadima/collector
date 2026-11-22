@@ -1,11 +1,11 @@
-// Giving a bare executable a Dock icon. There is no bundle around `./not1`, so
+// Giving a bare executable a Dock icon. There is no bundle around `./collector`, so
 // AppKit has nothing to read the .icns from; the same PNG the binary carries is
 // handed to NSApplication instead. Called once, from the main thread, after the
 // NSApplication exists.
 
 #import <Cocoa/Cocoa.h>
 
-void not1SetDockIcon(void *bytes, int len) {
+void collectorSetDockIcon(void *bytes, int len) {
 	NSData *data = [NSData dataWithBytes:bytes length:(NSUInteger)len];
 	if (data == nil) {
 		return;

@@ -15,7 +15,7 @@ import (
 	"strings"
 	"time"
 
-	"not1/internal/vault"
+	"collector/internal/vault"
 )
 
 // Attachments live in one folder at the vault root, so a page can link to them
@@ -280,7 +280,7 @@ func fetchTitle(rawURL string) (string, string, error) {
 	if err != nil {
 		return "", "", err
 	}
-	req.Header.Set("User-Agent", "Mozilla/5.0 (compatible; not1/1.0)")
+	req.Header.Set("User-Agent", "Mozilla/5.0 (compatible; collector/1.0)")
 	req.Header.Set("Accept", "text/html,application/xhtml+xml")
 	client := &http.Client{Timeout: 6 * time.Second}
 	resp, err := client.Do(req)

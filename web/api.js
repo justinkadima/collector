@@ -2,8 +2,8 @@
 // the app passes in the URL.
 
 const params = new URLSearchParams(location.search);
-export const TOKEN = params.get("t") || sessionStorage.getItem("not1-token") || "";
-if (TOKEN) sessionStorage.setItem("not1-token", TOKEN);
+export const TOKEN = params.get("t") || sessionStorage.getItem("collector-token") || "";
+if (TOKEN) sessionStorage.setItem("collector-token", TOKEN);
 
 export class ApiError extends Error {
   constructor(message, status, code) {
@@ -18,7 +18,7 @@ export async function api(path, { method = "GET", body } = {}) {
     method,
     headers: {
       "Content-Type": "application/json",
-      "X-Not1-Token": TOKEN,
+      "X-Collector-Token": TOKEN,
     },
     body: body === undefined ? undefined : JSON.stringify(body),
   });

@@ -1,7 +1,7 @@
 package index
 
 import (
-	"not1/internal/vault"
+	"collector/internal/vault"
 )
 
 // Event is a calendar entry as the index knows it: the parsed line plus the
