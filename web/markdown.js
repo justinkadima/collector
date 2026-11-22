@@ -394,6 +394,86 @@ function bookmarkCard(title, href, at = "") {
   );
 }
 
+/* ----------------------------------------------------------------- events */
+
+// One line of an ```events fence: a date, an optional time or time range, then a
+// title. This is the same grammar the Go side indexes (internal/vault/events.go)
+// — the fence is the only copy of an event, so both readers must agree.
+const EVENT_LINE_RE = /^(\d{4}-\d{2}-\d{2})(?:\s+(\d{1,2}:\d{2})(?:\s*[-–]\s*(\d{1,2}:\d{2}))?)?\s+(\S.*)$/;
+
+const evDate = new Intl.DateTimeFormat(undefined, { weekday: "short", day: "numeric", month: "short" });
+
+export function parseEvents(code) {
+  const out = [];
+  for (const line of String(code || "").split("\n")) {
+    const ev = parseEventLine(line);
+    if (ev) out.push(ev);
+  }
+  return out;
+}
+
+export function parseEventLine(line) {
+  const m = String(line || "").trim().match(EVENT_LINE_RE);
+  if (!m) return null;
+  const [y, mo, d] = m[1].split("-").map(Number);
+  const at = new Date(y, mo - 1, d);
+  if (at.getFullYear() !== y || at.getMonth() !== mo - 1 || at.getDate() !== d) return null;
+  const title = m[4].trim();
+  if (!title || title.startsWith("#")) return null;
+  const clock = (v) => {
+    const [h, mi] = v.split(":").map(Number);
+    if (!(h >= 0 && h < 24 && mi >= 0 && mi < 60)) return "";
+    return String(h).padStart(2, "0") + ":" + String(mi).padStart(2, "0");
+  };
+  const ev = { date: m[1], start: "", end: "", title, at };
+  if (m[2]) {
+    ev.start = clock(m[2]);
+    if (!ev.start || (m[3] && !clock(m[3]))) return null;
+    if (m[3]) ev.end = clock(m[3]);
+  }
+  return ev;
+}
+
+/** An events fence renders as the thing it describes, not as source text. */
+function eventsBlock(code, at) {
+  const rows = String(code || "")
+    .split("\n")
+    .map((line) => ({ line, ev: parseEventLine(line) }))
+    .filter((r) => r.line.trim());
+  const events = rows.filter((r) => r.ev).length;
+  const today = isoToday();
+  let body = "";
+  for (const r of rows) {
+    if (!r.ev) {
+      body += `<li class="ev-bad" title="Not an event yet — a line reads: 2026-11-24 09:30 Title">${esc(
+        r.line.trim()
+      )}</li>`;
+      continue;
+    }
+    const ev = r.ev;
+    const when = ev.start ? (ev.end ? ev.start + "–" + ev.end : ev.start) : "all day";
+    body +=
+      `<li class="ev${ev.date === today ? " today" : ""}">` +
+      `<span class="ev-day">${esc(evDate.format(ev.at))}</span>` +
+      `<span class="ev-time${ev.start ? "" : " all"}">${esc(when)}</span>` +
+      `<span class="ev-title">${esc(ev.title)}</span>` +
+      `</li>`;
+  }
+  return (
+    `<div class="md-events"${at}>` +
+    `<div class="md-events-bar"><span class="md-events-label">Events</span>` +
+    `<span class="md-events-count">${events}</span></div>` +
+    `<div class="md-events-body">` +
+    (body ? `<ul class="md-events-list">${body}</ul>` : `<div class="md-events-empty">No events yet.</div>`) +
+    `</div></div>`
+  );
+}
+
+const isoToday = () => {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+};
+
 export function renderMarkdown(src, ctx = {}) {
   const lines = String(src || "").replace(/\r\n?/g, "\n").split("\n");
   // Every top-level block records the source lines it came from (end exclusive),
@@ -424,6 +504,10 @@ export function renderMarkdown(src, ctx = {}) {
       }
       i++; // closing fence (or EOF)
       const code = buf.join("\n");
+      if (lang.toLowerCase() === "events") {
+        out += eventsBlock(code, at("events", openLine, i));
+        continue;
+      }
       const label = LANG_LABEL[lang.toLowerCase()] || (lang ? lang.toUpperCase() : "Text");
       out +=
         `<div class="md-code" data-line="${openLine}" data-end="${i}" data-kind="code" data-lang="${esc(lang)}">` +

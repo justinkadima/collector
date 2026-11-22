@@ -150,6 +150,19 @@ the tile.
   language and a Copy button; click the language to change it, which rewrites
   that one fence line. Highlighting is a small built-in tokenizer — no
   dependency, and an unknown language is just escaped.
+- **Events live in the page that owns them.** Write an ```events fence and each
+  line is an event: `2026-11-24 09:30 Standup`, `2026-11-24 14:00-15:00 Design
+  review`, or just `2026-11-26 Justin's birthday` for an all-day one. Blank
+  lines and `#` comments are ignored. Nothing else stores them — the fence is an
+  ordinary code block, so the file still reads fine in vim or Obsidian, and
+  deleting the index loses no events. `/events` starts one, dated today.
+- **The calendar is a column, not a window.** The toolbar's calendar opens a
+  month on the right; the page keeps its width while you read it. Days with
+  events carry dots (a faint one for an all-day event), the selected day lists
+  its events underneath, and clicking one opens the page scrolled to the line
+  that defines it. The `+` on a day writes `2026-12-03 ` into the page's last
+  events fence and leaves the caret there, so you type the title and nothing
+  else. With no page open it opens your "Calendar" page, or makes one.
 - Live file watching via SSE: edits from another editor show up without a
   reload; unsaved changes raise a conflict banner instead of being lost.
 - Light/dark theme, resizable and collapsible sidebar, both remembered.
@@ -287,8 +300,8 @@ web/                    the UI: no framework, no build step, ES modules
 
 The API is small and local: bootstrap, tree, page read/write (with `expectMod`
 for conflicts), rename, move, delete, search, resolve, database read/view/cell
-writes, attachment copy/upload, bookmark title lookup, export, and an event
-stream. Every request carries a random per-run token, which is injected into the
+writes, attachment copy/upload, bookmark title lookup, export, the agenda (a
+date range of events, read out of the fences), and a change stream. Every request carries a random per-run token, which is injected into the
 page. The MCP server in `internal/mcpsrv` is a second door onto the same code:
 it opens the vault directly instead of going through HTTP, and is the only part
 of the program that expects a client other than the UI.
@@ -296,7 +309,8 @@ of the program that expects a client other than the UI.
 ## Not in scope
 
 Sync, accounts, block ids or nesting containers, rollups, relations between
-databases, plugins. A block here is a line with a source range, not an object in
+databases, plugins, and calendars that live elsewhere: events are yours, in your
+files, and importing Google Calendar is a different program's job. A block here is a line with a source range, not an object in
 a sidecar store — which is exactly why the file stays editable in vim.
 The point is a good desktop client for a folder of markdown, and the file format
 is the promise.

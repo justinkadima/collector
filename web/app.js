@@ -11,6 +11,7 @@ import {
 } from "./cells.js";
 import { fetchDatabase, renderDatabase } from "./db.js";
 import { initBlocks } from "./blocks.js";
+import { initCalendar, toggleCalendar, refreshCalendar } from "./calendar.js";
 import { autoResize, caretCoords } from "./editor.js";
 
 const $ = (sel, root = document) => root.querySelector(sel);
@@ -142,6 +143,11 @@ async function init() {
   bindChrome();
   bindEditor();
   bindShortcuts();
+  initCalendar({
+    // An event is a line in a file: opening one puts you on that line.
+    open: (path, line) => openPage(path, { line }),
+    add: (date) => addEventOn(date),
+  });
   try {
     const data = await api("/api/bootstrap");
     onWorkspaceData(data);
@@ -488,7 +494,7 @@ function markActiveRow() {
 
 /* -------------------------------------------------------------- open page */
 
-async function openPage(path, { force = false } = {}) {
+async function openPage(path, { force = false, line = null } = {}) {
   if (!path) return;
   if (state.dirty && !force) {
     await savePage();
@@ -508,6 +514,7 @@ async function openPage(path, { force = false } = {}) {
     markActiveRow();
     history.replaceState(null, "", "#" + encodeURI(data.page.path));
     el.scroller.scrollTop = 0;
+    if (line != null) revealLine(line);
     updateSaveState("");
   } catch (err) {
     if (err instanceof ApiError && err.code === "not_found") {
@@ -820,6 +827,7 @@ async function savePage({ force = false } = {}) {
         ...state.recentPages.filter((r) => r.path !== res.page.path && r.path !== prevPath),
       ].slice(0, 10);
       renderSideRecent();
+      refreshCalendar();
     }
   } catch (err) {
     if (err instanceof ApiError && err.code === "conflict") {
@@ -858,6 +866,7 @@ function bindChrome() {
   $("#collapse-btn").innerHTML = icon("panel");
   $("#show-sidebar").innerHTML = icon("panel");
   $("#page-menu").innerHTML = icon("more");
+  $("#calendar-btn").innerHTML = icon("calendar");
   $("#reveal-btn").innerHTML = icon("folder-open");
   $("#theme-btn").innerHTML = icon("moon");
   $("#collapse-btn").onclick = () => setSidebar(false);
@@ -866,6 +875,7 @@ function bindChrome() {
   $("#reveal-btn").onclick = () =>
     api("/api/reveal", { method: "POST", body: { path: "" } }).catch((e) => toast(e.message, "error"));
   $("#search-btn").onclick = () => openPalette();
+  $("#calendar-btn").onclick = () => toggleCalendar();
   $("#new-page-btn").onclick = () => createPage();
   $("#new-folder-btn").onclick = () => createFolder();
   $("#page-menu").dataset.opensMenu = "1";
@@ -1317,6 +1327,17 @@ const SLASH_ITEMS = [
     sel: [2, 8],
     match: ["table", "grid"],
   },
+  {
+    key: "events",
+    label: "Events",
+    desc: "Today, on the calendar",
+    icon: "🗓",
+    // A block construct, so it arrives with air around it and the date already
+    // started: the caret lands where the title goes.
+    block: true,
+    gen: () => eventsTemplate(),
+    match: ["events", "event", "calendar", "agenda", "schedule", "date"],
+  },
   { key: "link", label: "Link to page", desc: "[[", icon: "⧉", template: "[[", match: ["link", "page", "wikilink", "[["] },
   {
     key: "image",
@@ -1437,6 +1458,16 @@ function closeSlash() {
   }
 }
 
+const pad2 = (n) => String(n).padStart(2, "0");
+
+/** Today's fence, with the caret where the title goes. */
+function eventsTemplate() {
+  const d = new Date();
+  const date = `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+  const line = date + " ";
+  return { text: "```events\n" + line + "\n```", caret: "```events\n".length + line.length };
+}
+
 function applySlash(item) {
   if (!item) return;
   const ta = el.editor;
@@ -1448,7 +1479,8 @@ function applySlash(item) {
     return;
   }
   ta.focus();
-  let template = item.template;
+  const gen = item.gen ? item.gen() : null;
+  let template = gen ? gen.text : item.template;
   if (item.block) {
     // A blank line above, unless the line is already blank: block constructs
     // like tables cannot interrupt a paragraph in ordinary markdown.
@@ -1458,8 +1490,11 @@ function applySlash(item) {
     if (prefix.trim() || above.trim()) template = "\n" + template;
   }
   ta.setRangeText(template, slash.start, end, "end");
-  const shift = template.length - item.template.length;
-  if (item.sel) {
+  const shift = template.length - (gen ? gen.text : item.template).length;
+  if (gen) {
+    const pos = slash.start + shift + gen.caret;
+    ta.setSelectionRange(pos, pos);
+  } else if (item.sel) {
     // Select the placeholder so typing replaces it, like a fresh Notion table.
     ta.setSelectionRange(slash.start + shift + item.sel[0], slash.start + shift + item.sel[1]);
   } else if (item.caret != null) {
@@ -2365,6 +2400,7 @@ function paletteCommands() {
     { group: "Actions", title: "New page", icon: "＋", hint: "⌘N", run: () => createPage() },
     { group: "Actions", title: "New database", icon: "▦", run: () => createDatabase() },
     { group: "Actions", title: "New folder", icon: "🗂", run: () => createFolder() },
+    { group: "Actions", title: "Calendar", icon: "🗓", hint: "Events across the vault", run: () => toggleCalendar(true) },
     { group: "Actions", title: "Open another folder…", icon: "📂", run: pickFolder },
     {
       group: "Actions",
@@ -2579,6 +2615,7 @@ let treeRefreshTimer = 0;
 let dbRefreshTimer = 0;
 function onExternalChange(paths) {
   if (!state.workspace) return;
+  refreshCalendar();
   clearTimeout(treeRefreshTimer);
   treeRefreshTimer = setTimeout(() => refreshTree(), 120);
   if (state.db && state.page?.type === "database") {
@@ -2604,6 +2641,91 @@ function onExternalChange(paths) {
     return;
   }
   if (state.page && paths.includes(state.page.path)) return;
+}
+
+/* --------------------------------------------------------------- calendar */
+
+/** Bring a source line into view and let it glow for a moment. */
+function revealLine(line) {
+  const node =
+    [...el.preview.children].find(
+      (n) => n.dataset.end != null && Number(n.dataset.line) <= line && line < Number(n.dataset.end)
+    ) || el.preview;
+  node.scrollIntoView({ block: "center" });
+  node.classList.remove("flash");
+  void node.offsetWidth; // restart the animation
+  node.classList.add("flash");
+  setTimeout(() => node.classList.remove("flash"), 1500);
+}
+
+/**
+ * Write an event by writing a line. The panel asks; the page is the answer:
+ * append to the page's last ```events block, or give the page one.
+ */
+async function addEventOn(date) {
+  if (state.needsWorkspace) return;
+  if (!state.page) {
+    // Nowhere to write yet: an events page is the natural home, and one is
+    // only made when the vault has none.
+    try {
+      const hit = await api("/api/resolve?target=" + encodeURIComponent("Calendar")).catch(() => null);
+      if (hit?.found && hit.path) {
+        await openPage(hit.path, { force: true });
+      } else {
+        const res = await api("/api/page", { method: "POST", body: { dir: "", title: "Calendar", kind: "page" } });
+        await refreshTree();
+        await openPage(res.page.path, { force: true });
+      }
+    } catch (err) {
+      toast(err.message, "error");
+      return;
+    }
+  }
+  if (!state.page || state.page.type === "database") {
+    toast("Open a page to hold the event", "error");
+    return;
+  }
+  if (state.dirty) await savePage();
+
+  const lines = (state.page.body || "").replace(/\r/g, "").split("\n");
+  if (lines.length === 1 && !lines[0].trim()) lines.length = 0;
+  const entry = date + " ";
+  let at = -1;
+
+  let open = -1;
+  for (let i = 0; i < lines.length; i++) {
+    if (/^\s*(`{3,}|~{3,})\s*events\s*$/.test(lines[i])) open = i;
+  }
+  if (open >= 0) {
+    const marker = lines[open].trim().charAt(0);
+    const closer = new RegExp("^\\s*" + marker + "{3,}\\s*$");
+    let close = lines.length;
+    for (let i = open + 1; i < lines.length; i++) {
+      if (closer.test(lines[i])) {
+        close = i;
+        break;
+      }
+    }
+    at = close;
+    while (at > open + 1 && !lines[at - 1].trim()) at--;
+    lines.splice(at, 0, entry);
+  } else {
+    while (lines.length && !lines[lines.length - 1].trim()) lines.pop();
+    if (lines.length) lines.push("");
+    lines.push("```events");
+    at = lines.length; // the line the user types on
+    lines.push(entry, "```");
+  }
+
+  commitBody(lines.join("\n") + "\n", { rerender: true });
+  await savePage();
+  // The caret belongs right after the date just written: type the title.
+  setTimeout(() => {
+    if (!blocks?.openAtLine(at, entry.length)) return;
+    const ta = document.querySelector("textarea.block-edit");
+    const pos = ta ? ta.value.lastIndexOf(entry) : -1;
+    if (ta && pos >= 0) ta.setSelectionRange(pos + entry.length, pos + entry.length);
+  }, 40);
 }
 
 /* ----------------------------------------------------------------- boot */
