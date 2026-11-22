@@ -12,7 +12,7 @@ changes the markdown grammar it says so, and the old shape keeps working.
 
 - The module path is `github.com/justinkadima/collector`, so
   `go install github.com/justinkadima/collector@latest` works.
-- MIT license, a screenshot, and a README written for someone who has never
+- MIT license, a recorded demo, and a README written for someone who has never
   heard of the app.
 - Continuous integration: gofmt, vet, tests and a build on macOS, Linux and
   Windows.

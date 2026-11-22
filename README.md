@@ -4,7 +4,7 @@
 [![License: MIT](https://img.shields.io/badge/license-MIT-3b3834.svg)](LICENSE)
 [![Release](https://img.shields.io/github/v/release/justinkadima/collector?label=release&color=2383e2)](https://github.com/justinkadima/collector/releases/latest)
 
-![A page, a table, an event and the calendar, all read from one folder of markdown](docs/screenshot.png)
+![Editing a bullet, a table cell, searching the vault, opening an event from the calendar — every one of those is a write to a .md file](docs/demo.gif)
 
 A desktop notes app for markdown files — one folder you choose, no account, no
 sync service, nothing in the cloud. Offline by default, and still yours if you
