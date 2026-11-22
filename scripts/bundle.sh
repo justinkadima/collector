@@ -30,7 +30,8 @@ app="dist/Collector.app"
 rm -rf "$app"
 mkdir -p "$app/Contents/MacOS" "$app/Contents/Resources"
 
-go build -ldflags "-X main.version=$version" -o "$app/Contents/MacOS/Collector" .
+# -s -w: the bundle is a download, and a debug symbol table is not part of it.
+go build -trimpath -ldflags "-s -w -X main.version=$version" -o "$app/Contents/MacOS/Collector" .
 cp assets/collector.icns "$app/Contents/Resources/collector.icns"
 
 cat > "$app/Contents/Info.plist" <<PLIST
