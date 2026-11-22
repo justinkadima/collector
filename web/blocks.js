@@ -807,6 +807,47 @@ export function initBlocks(opts) {
     selectBlocks(press.from, r);
   });
 
+  /** The source line just after the block the pointer sits under, or null when
+   *  the pointer is above the first block (then it is the top of the page). */
+  function lineAtPoint(y) {
+    let after = 0;
+    for (const el of tops()) {
+      const r = el.getBoundingClientRect();
+      if (y >= r.top + r.height / 2) after = Number(el.dataset.end);
+    }
+    return after;
+  }
+
+  /** Open a blank paragraph at a source line, making one if the line is taken.
+   *  `line === null` means "the end of the page". */
+  function openBlankAt(line) {
+    const lines = (body() || "").split("\n");
+    if (line === null || line === undefined) line = lines.length - 1;
+    if (line >= lines.length || lines[line].trim()) {
+      lines.splice(line, 0, "");
+      commit(lines.join("\n"), true);
+      render();
+    }
+    openAtLine(line, 0);
+  }
+
+  // The padding under the page is paper too — clicking there means "write
+  // here". Above the page stays inert: a stray click in the top margin should
+  // not add a blank line to the file.
+  const paper = host.closest(".page") || host.parentElement;
+  paper?.addEventListener("click", (e) => {
+    if (e.target !== paper || !editable?.()) return;
+    if (e.clientY < host.getBoundingClientRect().bottom - 4) return;
+    press = null;
+    if (sel) clearSelection();
+    if (edit) {
+      const ed = edit;
+      close(ed);
+      render();
+    }
+    openBlankAt(lineAtPoint(e.clientY));
+  });
+
   const endPress = () => {
     setTimeout(() => {
       press = null;
@@ -847,19 +888,11 @@ export function initBlocks(opts) {
       return;
     }
     if (!unit) {
-      // Clicking the empty space under the last block starts a new paragraph
-      // there, which is how a Notion page grows at the bottom.
+      // Empty space is paper: the line you clicked is the line you write on.
+      // Under the last block that grows the page; between two blocks — the gap
+      // under a table, say — it opens (or makes) the line right there.
       if (e.target !== host) return;
-      let text = body() || "";
-      let lines = text.split("\n");
-      let line = lines.length - 1;
-      if (lines[line].trim()) {
-        text = text.replace(/\s+$/, "") + "\n";
-        commit(text, true);
-        lines = text.split("\n");
-        line = lines.length - 1;
-      }
-      openAtLine(line, 0);
+      openBlankAt(e.clientY > 0 ? lineAtPoint(e.clientY) : null);
       return;
     }
     const kind = unit.dataset.kind;

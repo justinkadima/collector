@@ -1310,7 +1310,11 @@ const SLASH_ITEMS = [
     label: "Table",
     desc: "3 × 3",
     icon: "▦",
-    template: "| Column | Column | Column |\n| --- | --- | --- |\n|  |  |  |\n|  |  |  |",
+    // A table is the one block you cannot Enter out of, so it comes with the
+    // blank line under it already there to click into. And a table cannot
+    // interrupt a paragraph — hence `block`, which keeps a blank line above.
+    block: true,
+    template: "| Column | Column | Column |\n| --- | --- | --- |\n|  |  |  |\n|  |  |  |\n",
     sel: [2, 8],
     match: ["table", "grid"],
   },
@@ -1445,12 +1449,22 @@ function applySlash(item) {
     return;
   }
   ta.focus();
-  ta.setRangeText(item.template, slash.start, end, "end");
+  let template = item.template;
+  if (item.block) {
+    // A blank line above, unless the line is already blank: block constructs
+    // like tables cannot interrupt a paragraph in ordinary markdown.
+    const ls = ta.value.lastIndexOf("\n", slash.start - 1) + 1;
+    const prefix = ta.value.slice(ls, slash.start);
+    const above = ls > 1 ? ta.value.slice(ta.value.lastIndexOf("\n", ls - 2) + 1, ls - 1) : "";
+    if (prefix.trim() || above.trim()) template = "\n" + template;
+  }
+  ta.setRangeText(template, slash.start, end, "end");
+  const shift = template.length - item.template.length;
   if (item.sel) {
     // Select the placeholder so typing replaces it, like a fresh Notion table.
-    ta.setSelectionRange(slash.start + item.sel[0], slash.start + item.sel[1]);
+    ta.setSelectionRange(slash.start + shift + item.sel[0], slash.start + shift + item.sel[1]);
   } else if (item.caret != null) {
-    const pos = slash.start + item.caret;
+    const pos = slash.start + shift + item.caret;
     ta.setSelectionRange(pos, pos);
   }
   ta.dispatchEvent(new Event("input", { bubbles: true }));

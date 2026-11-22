@@ -87,7 +87,12 @@ still builds and runs with `-browser`.
   edit in place: click one, type, and the text is spliced back into the row of
   the `.md` file. `Enter` saves and drops a row, `Tab`/`Shift-Tab` save and move
   across, `Esc` reverts, clicking away saves. `/table` drops in a 3×3 skeleton
-  with the first cell selected.
+  with the first cell selected, and a blank line above and below it — a table
+  can't interrupt a paragraph in ordinary markdown, and a table is the one block
+  you can't press `Enter` out of, so the line to write on is already there.
+  Clicking empty paper always writes where you clicked: between two blocks it
+  opens (or makes) the line at that height, under the last block it grows the
+  page.
 - Tables have Notion-style menus for rows and columns. Hover a body row for the
   six-dot handle on its left, or right-click a cell: insert row above/below,
   duplicate row, clear contents, delete row. Hover the header for the handle
