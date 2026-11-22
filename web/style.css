@@ -13,6 +13,7 @@
   --active: rgba(55, 53, 47, 0.095);
   --accent: #2383e2;
   --accent-soft: rgba(35, 131, 226, 0.12);
+  --sel: rgba(35, 131, 226, 0.16);
   --code-bg: #f7f6f3;
   --mark: rgba(255, 208, 0, 0.3);
   --shadow-pop: 0 0 0 1px rgba(15, 15, 15, 0.05), 0 10px 30px rgba(15, 15, 15, 0.13),
@@ -40,6 +41,7 @@
   --active: rgba(255, 255, 255, 0.1);
   --accent: #4f9ceb;
   --accent-soft: rgba(79, 156, 235, 0.16);
+  --sel: rgba(79, 156, 235, 0.26);
   --code-bg: #242424;
   --mark: rgba(255, 208, 0, 0.25);
   --shadow-pop: 0 0 0 1px rgba(255, 255, 255, 0.06), 0 12px 34px rgba(0, 0, 0, 0.5),
@@ -659,30 +661,64 @@ body.no-workspace #reveal-btn {
   background: var(--hover);
 }
 
-.write-wrap {
-  position: relative;
-}
-
-#editor {
-  display: block;
-  width: 100%;
-  min-height: 55vh;
+/* The page body is edited in place; this textarea is only a string buffer that
+   keeps markdown offsets in one place (see blocks.js). */
+#editor.buffer {
+  position: absolute;
+  left: -9999px;
+  top: 0;
+  width: 4px;
+  height: 4px;
   border: 0;
-  outline: 0;
   padding: 0;
   margin: 0;
   resize: none;
-  background: transparent;
-  font-family: var(--font);
-  font-size: 16.5px;
-  line-height: 1.68;
-  color: var(--text);
+  opacity: 0;
+  pointer-events: none;
   overflow: hidden;
-  caret-color: var(--accent);
   tab-size: 2;
 }
-#editor::placeholder {
-  color: var(--text-faint);
+
+/* ---------------- block editing ---------------- */
+
+.md {
+  position: relative;
+  /* Room under the last block to click into, like the paper Notion leaves. */
+  min-height: 55vh;
+}
+
+/* A textarea laid exactly over the block it is editing, matching its type. */
+.block-edit {
+  position: absolute;
+  z-index: 3;
+  display: block;
+  box-sizing: content-box;
+  border: 0;
+  outline: 0;
+  margin: 0;
+  padding: 0;
+  background: transparent;
+  color: var(--text);
+  resize: none;
+  overflow: hidden;
+  caret-color: var(--accent);
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+  tab-size: 2;
+  border-radius: 2px;
+  box-shadow: 0 0 0 1px var(--accent-soft);
+}
+.block-hidden {
+  visibility: hidden;
+}
+.block-ghost {
+  min-height: 1.68em;
+}
+/* Selected blocks read as one run of text, like a Notion multi-block selection. */
+.block-selected {
+  background: var(--sel);
+  box-shadow: 0 0 0 3px var(--sel);
+  border-radius: 3px;
 }
 
 /* ---------------- markdown rendering ---------------- */

@@ -11,13 +11,8 @@ import {
   scheduleGripHide,
 } from "./cells.js";
 import { fetchDatabase, renderDatabase } from "./db.js";
-import {
-  autoResize,
-  caretCoords,
-  wrapSelection,
-  indentSelection,
-  handleEnter,
-} from "./editor.js";
+import { initBlocks } from "./blocks.js";
+import { autoResize, caretCoords } from "./editor.js";
 
 const $ = (sel, root = document) => root.querySelector(sel);
 const $$ = (sel, root = document) => [...root.querySelectorAll(sel)];
@@ -33,7 +28,6 @@ const state = {
   saving: false,
   saveAgain: false,
   saveTimer: 0,
-  readMode: false,
   backlinks: [],
   expanded: new Set(),
   recentPages: [],
@@ -47,6 +41,12 @@ const state = {
 };
 
 const el = {};
+let blocks = null;
+
+/** Where the caret is on screen, for anchoring popups. */
+function caretBox() {
+  return blocks?.caretBox() || caretCoords(el.editor, el.editor.selectionStart);
+}
 let overlay = null;
 let menu = null;
 let slash = { open: false, start: 0, query: "", items: [], sel: 0, node: null };
@@ -567,9 +567,7 @@ function renderPage() {
 
   const isDb = p.type === "database";
   document.body.classList.toggle("is-db", isDb);
-  $("#mode-seg").classList.toggle("hidden", isDb);
   if (isDb) {
-    $("#write-wrap").classList.add("hidden");
     el.preview.classList.add("hidden");
     el.backlinks.classList.add("hidden");
     renderMeta();
@@ -586,11 +584,9 @@ function renderPage() {
 
   el.editor.value = p.body || "";
   renderPreview();
-  setTimeout(() => autoResize(el.editor), 0);
   renderMeta();
   renderBacklinks();
   renderCrumbs();
-  setMode(state.readMode ? "read" : "write", false);
 }
 
 // A database page shows a view over a folder instead of a text body. The
@@ -661,9 +657,14 @@ function dbCtx() {
 
 function renderPreview() {
   const body = state.page?.body || "";
+  // The page is being replaced under the overlay: drop any open block first.
+  blocks?.reset();
+  el.preview.classList.toggle("hidden", state.page?.type === "database");
+  // An empty page still needs a block to click into.
   el.preview.innerHTML = body.trim()
     ? renderMarkdown(body, mdCtx())
-    : '<p class="empty-doc">This page is empty.</p>';
+    : '<p class="empty-doc" data-line="0" data-end="1" data-kind="p">Start writing…</p>';
+  blocks?.repaint();
 }
 
 function renderMeta() {
@@ -746,24 +747,10 @@ function renderCrumbs() {
   });
 }
 
-/* ------------------------------------------------------------------ modes */
+/* ------------------------------------------------------------------- mode */
 
-function setMode(mode, persist = true) {
-  state.readMode = mode === "read";
-  if (persist) localStorage.setItem("not1-mode", mode);
-  $$(".seg-btn").forEach((b) => b.classList.toggle("active", b.dataset.mode === mode));
-  const hasPage = !!state.page;
-  $("#write-wrap").classList.toggle("hidden", !hasPage || state.readMode);
-  el.preview.classList.toggle("hidden", !hasPage || !state.readMode);
-  if (state.readMode) renderPreview();
-  else if (hasPage) setTimeout(() => autoResize(el.editor), 0);
-}
-
-function toggleMode() {
-  if (state.page?.type === "database") return;
-  if (!state.page) return;
-  setMode(state.readMode ? "write" : "read");
-}
+// There is no read mode and no write mode: the rendered page is the editor.
+// Clicking a block puts a textarea over it (see blocks.js).
 
 /* ------------------------------------------------------------------- save */
 
@@ -892,10 +879,6 @@ function bindChrome() {
     const r = e.currentTarget.getBoundingClientRect();
     openWorkspaceMenu(r.left, r.bottom + 4);
   };
-  $$(".seg-btn").forEach((b) => {
-    b.onclick = () => setMode(b.dataset.mode);
-  });
-
   el.tree.addEventListener("click", (e) => {
     const row = e.target.closest(".tree-row");
     if (!row) return;
@@ -1020,10 +1003,7 @@ function bindChrome() {
   window.addEventListener("resize", () => {
     if (slash.open) closeSlash();
     if (linker.open) closeLinker();
-    if (state.page && !state.readMode) autoResize(el.editor);
   });
-
-  setMode(localStorage.getItem("not1-mode") === "write" ? "write" : "read", false);
 
   window.addEventListener("beforeunload", () => {
     if (state.dirty && state.page) {
@@ -1046,9 +1026,6 @@ function setSidebar(open) {
   document.body.classList.toggle("sidebar-hidden", !open);
   $("#show-sidebar").classList.toggle("hidden", open);
   localStorage.setItem("not1-sidebar", open ? "1" : "0");
-  setTimeout(() => {
-    if (state.page && !state.readMode) autoResize(el.editor);
-  }, 200);
 }
 
 function setSidebarWidth(w, persist = true) {
@@ -1057,20 +1034,24 @@ function setSidebarWidth(w, persist = true) {
   if (persist) api("/api/config", { method: "POST", body: { sidebarWidth: w } }).catch(() => {});
 }
 
-/** Cell edits rewrite the body, so the textarea has to follow along. */
-function commitBody(next) {
+/**
+ * Anything that rewrites the body goes through here: the hidden textarea is the
+ * string buffer, the rendered page is the view. A change that did not come from
+ * the block editor re-renders the page and puts the caret back.
+ */
+function commitBody(next, { fromBlock = false, rerender = false } = {}) {
   if (!state.page || next === state.page.body) return;
   state.page.body = next;
   el.editor.value = next;
-  autoResize(el.editor);
   scheduleSave();
+  if (!fromBlock) blocks?.refresh(rerender);
 }
 
 function bindEditor() {
   const ta = el.editor;
 
   // Files dragged in from Finder become attachments, not a URL and not lost.
-  for (const zone of [el.preview, ta, $("#write-wrap")].filter(Boolean)) {
+  for (const zone of [el.preview].filter(Boolean)) {
     zone.addEventListener("dragover", (e) => {
       if (!e.dataTransfer?.types?.includes("Files") || !state.page) return;
       e.preventDefault();
@@ -1083,11 +1064,25 @@ function bindEditor() {
       zone.classList.remove("drop-file");
       if (!files.length || !state.page) return;
       e.preventDefault();
-      if (state.readMode) setMode(false);
       dropFiles(files, caretTarget());
     });
   }
   el.editor.maxLength = 10_000_000;
+  // The rendered page is the editor. `el.editor` is only a string buffer that
+  // keeps the offset math (slash menu, link picker, attachments) unchanged.
+  blocks = initBlocks({
+    host: el.preview,
+    body: () => state.page?.body ?? "",
+    commit: (next, fromBlock) => commitBody(next, { fromBlock }),
+    render: () => renderPreview(),
+    mirror: () => el.editor,
+    editable: () => !!state.page && state.page.type !== "database",
+    key: (e) => handlePopupKeys(e),
+    caret: (pos) => {
+      el.editor.setSelectionRange(pos, pos);
+      if (!updateLinkerFromInput()) updateSlashFromInput();
+    },
+  });
   initCells({
     source: () => state.page?.body ?? "",
     render: (md) => renderInline(md, mdCtx()),
@@ -1100,15 +1095,16 @@ function bindEditor() {
     },
     menu: (x, y, items) => openMenu(x, y, items, { className: "popover table-menu", search: true }),
   });
+  // Only programs write to this textarea now, so its input event means "the
+  // model changed behind the view's back": render, then restore the caret.
   ta.addEventListener("input", () => {
     if (!state.page) return;
     state.page.body = ta.value;
-    autoResize(ta);
-    if (!updateLinkerFromInput()) updateSlashFromInput();
     scheduleSave();
-    if (state.readMode) renderPreview();
+    blocks?.refresh(true);
+    if (!updateLinkerFromInput()) updateSlashFromInput();
   });
-  ta.addEventListener("keydown", onEditorKeydown);
+  ta.addEventListener("keydown", handlePopupKeys);
   ta.addEventListener("paste", (e) => {
     const text = e.clipboardData?.getData("text") || "";
     const s = ta.selectionStart;
@@ -1122,14 +1118,13 @@ function bindEditor() {
   el.preview.addEventListener("contextmenu", (e) => {
     const cell = e.target.closest(".md td[data-line], .md th[data-line]");
     // While a cell is open the pointer belongs to that cell, not to the row.
-    if (!cell || !state.readMode || document.querySelector("td.cell-editing")) return;
+    if (!cell || document.querySelector("td.cell-editing")) return;
     e.preventDefault();
     closeMenu();
     openCellMenu(cell, { x: e.clientX, y: e.clientY });
   });
   // The Notion-style drag handle: one handle that tracks the hovered row.
   el.preview.addEventListener("mousemove", (e) => {
-    if (!state.readMode) return hideRowGrip();
     // The header row is a column; body rows are rows.
     const th = e.target.closest(".md th[data-line]");
     if (th) return showColGrip(th);
@@ -1186,25 +1181,15 @@ function bindEditor() {
     }
     // A rendered table cell knows which markdown cell it came from, so clicking
     // it edits that cell in place (see cells.js).
+    // A table cell is the unit of editing inside a table (cells.js); every
+    // other block is edited by blocks.js, which listens on the same element.
     const mdCell = e.target.closest(".md td[data-line], .md th[data-line]");
-    if (mdCell) {
-      if (state.readMode) startCellEdit(mdCell, { x: e.clientX, y: e.clientY });
-      return;
-    }
-    if (e.target.closest("a, button, input, img, video, audio, pre, code, table, .md-code, .md-file")) return;
-    if (state.readMode) {
-      setMode("write");
-      el.editor.focus();
-      // Put the caret at the end rather than at an arbitrary spot mid-text.
-      const n = el.editor.value.length;
-      el.editor.setSelectionRange(n, n);
-    }
+    if (mdCell) startCellEdit(mdCell, { x: e.clientX, y: e.clientY });
   });
 }
 
 function markDirtyAndSave() {
   state.dirty = true;
-  autoResize(el.editor);
   scheduleSave();
 }
 
@@ -1225,35 +1210,35 @@ function openWiki(target) {
     .catch((err) => toast(err.message, "error"));
 }
 
-function onEditorKeydown(e) {
-  const ta = el.editor;
+/** Keys that belong to the slash menu and the link picker, while they are open. */
+function handlePopupKeys(e) {
   if (linker.open) {
     const n = linker.items.length;
     if (e.key === "ArrowDown" || (e.key === "Tab" && !e.shiftKey)) {
       e.preventDefault();
       if (n) linker.sel = (linker.sel + 1) % n;
       renderLinkerSelection();
-      return;
+      return true;
     }
     if (e.key === "ArrowUp" || (e.key === "Tab" && e.shiftKey)) {
       e.preventDefault();
       if (n) linker.sel = (linker.sel - 1 + n) % n;
       renderLinkerSelection();
-      return;
+      return true;
     }
     if (e.key === "Enter") {
       // With nothing to pick, let the newline through instead of eating it.
       if (linker.items.length) {
         e.preventDefault();
         applyLinker(linker.items[linker.sel]);
-        return;
+        return true;
       }
       closeLinker();
     }
     if (e.key === "Escape") {
       e.preventDefault();
       closeLinker();
-      return;
+      return true;
     }
   }
   if (slash.open) {
@@ -1261,64 +1246,27 @@ function onEditorKeydown(e) {
       e.preventDefault();
       slash.sel = (slash.sel + 1) % slash.items.length;
       renderSlashSelection();
-      return;
+      return true;
     }
     if (e.key === "ArrowUp" || (e.key === "Tab" && e.shiftKey)) {
       e.preventDefault();
       slash.sel = (slash.sel - 1 + slash.items.length) % slash.items.length;
       renderSlashSelection();
-      return;
+      return true;
     }
     if (e.key === "Enter") {
       e.preventDefault();
       applySlash(slash.items[slash.sel]);
-      return;
+      return true;
     }
     if (e.key === "Escape") {
       e.preventDefault();
       closeSlash();
-      return;
+      return true;
     }
   }
 
-  const mod = e.metaKey || e.ctrlKey;
-  if (mod && !e.shiftKey) {
-    const k = e.key.toLowerCase();
-    if (k === "b") {
-      e.preventDefault();
-      wrapSelection(ta, "**", "**", "bold");
-      return;
-    }
-    if (k === "i") {
-      e.preventDefault();
-      wrapSelection(ta, "*", "*", "italic");
-      return;
-    }
-    if (k === "k") {
-      e.preventDefault();
-      wrapSelection(ta, "[", "](url)", "text");
-      return;
-    }
-    if (k === "`") {
-      e.preventDefault();
-      wrapSelection(ta, "`", "`", "code");
-      return;
-    }
-  }
-  if (e.key === "Tab") {
-    e.preventDefault();
-    indentSelection(ta, e.shiftKey);
-    return;
-  }
-  if (e.key === "Enter" && !e.shiftKey) {
-    if (handleEnter(ta, e)) {
-      updateSlashFromInput();
-      return;
-    }
-  }
-  if (e.key === "Escape" && state.dirty) {
-    // no-op: keep edits safe
-  }
+  return false;
 }
 
 /* --------------------------------------------------------------- slash UI */
@@ -1459,7 +1407,7 @@ function renderSlash() {
         </button>`
     )
     .join("");
-  const coords = caretCoords(el.editor, el.editor.selectionStart);
+  const coords = caretBox();
   const rect = slash.node.getBoundingClientRect();
   let top = coords.top + coords.height + 6;
   if (top + rect.height > window.innerHeight - 12) top = coords.top - rect.height - 6;
@@ -1520,7 +1468,7 @@ function insertTarget(start, end) {
   const value = ta.value.slice(0, start) + ta.value.slice(end);
   ta.value = value;
   ta.setSelectionRange(start, start);
-  commitBody(value);
+  commitBody(value, { rerender: true });
   return { pos: start, snapshot: value };
 }
 
@@ -1541,11 +1489,8 @@ function insertBlockAt(target, md) {
   ta.value = before + text + after;
   const caret = pos + text.length;
   ta.setSelectionRange(caret, caret);
-  commitBody(ta.value);
-  if (!state.readMode) {
-    ta.focus();
-    autoResize(ta);
-  }
+  // commitBody re-renders and hands the caret back to the block editor.
+  commitBody(ta.value, { rerender: true });
 }
 
 const safeAlt = (s) => String(s || "file").replace(/[[\]()]/g, "").trim() || "file";
@@ -1576,7 +1521,7 @@ async function attachFile(kind, target = caretTarget()) {
 /** Ask for a URL in a small popover anchored at the caret. */
 function askUrl(head, placeholder) {
   return new Promise((resolve) => {
-    const coords = caretCoords(el.editor, el.editor.selectionStart);
+    const coords = caretBox();
     const node = document.createElement("div");
     node.className = "url-pop";
     node.dataset.opensMenu = "1";
@@ -1889,7 +1834,7 @@ function renderLinker() {
     })
     .join("");
   linker.node.innerHTML = `<div class="link-head">Select a page</div>${rows || `<div class="link-empty">No pages match “${escapeHtml(linker.query)}”</div>`}`;
-  const coords = caretCoords(el.editor, linker.start);
+  const coords = caretBox();
   const rect = linker.node.getBoundingClientRect();
   let top = coords.top + coords.height + 6;
   if (top + rect.height > window.innerHeight - 12) top = coords.top - rect.height - 6;
@@ -2583,11 +2528,6 @@ function bindShortcuts() {
       setSidebar(document.body.classList.contains("sidebar-hidden"));
       return;
     }
-    if (mod && e.key.toLowerCase() === "e" && state.page) {
-      e.preventDefault();
-      toggleMode();
-      return;
-    }
     if (mod && e.key.toLowerCase() === "s") {
       e.preventDefault();
       if (state.page && state.dirty) savePage();
@@ -2661,7 +2601,7 @@ function initSidebarState() {
 }
 
 // Handy for debugging from the devtools console.
-window.not1 = { state, openPage, refreshTree, setMode, savePage };
+window.not1 = { state, openPage, refreshTree, savePage, blocks: () => blocks };
 
 document.addEventListener("DOMContentLoaded", () => {
   initSidebarState();

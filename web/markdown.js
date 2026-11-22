@@ -143,20 +143,20 @@ function splitCells(row) {
   return s.split("|").map((c) => c.trim());
 }
 
-function renderList(items, ctx, st) {
+function renderList(items, ctx, st, at = "") {
   // Build a tree from indentation, then render grouped tags.
   const root = { children: [], indent: -1 };
   const stack = [root];
   for (const it of items) {
     while (stack.length > 1 && stack[stack.length - 1].indent >= it.indent) stack.pop();
-    const node = { text: it.text, ordered: it.ordered, children: [], indent: it.indent };
+    const node = { text: it.text, ordered: it.ordered, children: [], indent: it.indent, line: it.line };
     stack[stack.length - 1].children.push(node);
     stack.push(node);
   }
-  return renderNodes(root.children, ctx, st);
+  return renderNodes(root.children, ctx, st, at);
 }
 
-function renderNodes(nodes, ctx, st) {
+function renderNodes(nodes, ctx, st, at = "") {
   let html = "";
   let i = 0;
   while (i < nodes.length) {
@@ -167,7 +167,7 @@ function renderNodes(nodes, ctx, st) {
       i++;
     }
     const allTasks = group.every((n) => /^\[[ xX]\]\s/.test(n.text));
-    html += `<${tag}${allTasks ? ' class="tasks"' : ""}>`;
+    html += `<${tag}${allTasks ? ' class="tasks"' : ""}${at}>`;
     for (const n of group) {
       const m = n.text.match(/^\[([ xX])\]\s+([\s\S]*)$/);
       let cls = "";
@@ -181,7 +181,13 @@ function renderNodes(nodes, ctx, st) {
       } else {
         body = inline(n.text, ctx, st);
       }
-      html += `<li${cls}>${body}${n.children.length ? renderNodes(n.children, ctx, st) : ""}</li>`;
+      // A list item is its own editing unit; nested items are rendered inside
+      // it and keep their own line numbers.
+      const unit =
+        n.line != null
+          ? ` data-line="${n.line}" data-end="${n.line + 1}" data-kind="li" data-unit="1"`
+          : "";
+      html += `<li${cls}${unit}>${body}${n.children.length ? renderNodes(n.children, ctx, st) : ""}</li>`;
     }
     html += `</${tag}>`;
   }
@@ -340,16 +346,16 @@ function highlight(code, langRaw) {
 }
 
 /** The html for one attachment block (image, video, audio or file card). */
-function mediaBlock(alt, src, ctx) {
+function mediaBlock(alt, src, ctx, at = "") {
   const url = isExternal(src) ? src : fileUrl(src.replace(/^\.\//, ""), ctx);
   const tag = mediaTag(src);
   if (tag === "video") {
-    return `<div class="md-media-block"><video class="md-media" src="${esc(url)}" controls preload="metadata" playsinline data-raw="${esc(
+    return `<div class="md-media-block"${at}><video class="md-media" src="${esc(url)}" controls preload="metadata" playsinline data-raw="${esc(
       src
     )}"></video></div>`;
   }
   if (tag === "audio") {
-    return `<div class="md-media-block"><audio class="md-media md-audio" src="${esc(url)}" controls preload="metadata" data-raw="${esc(
+    return `<div class="md-media-block"${at}><audio class="md-media md-audio" src="${esc(url)}" controls preload="metadata" data-raw="${esc(
       src
     )}"></audio></div>`;
   }
@@ -357,17 +363,17 @@ function mediaBlock(alt, src, ctx) {
     const name = src.split("/").pop() || alt || "file";
     const ext = name.includes(".") ? name.split(".").pop().toUpperCase() : "FILE";
     return (
-      `<a class="md-file" href="${esc(url)}" data-file="${esc(src)}">` +
+      `<a class="md-file" href="${esc(url)}" data-file="${esc(src)}"${at}>` +
       `<span class="md-file-ico">${FILE_ICON}</span>` +
       `<span class="md-file-body"><span class="md-file-name">${esc(alt || name)}</span>` +
       `<span class="md-file-meta">${esc(ext)}</span></span></a>`
     );
   }
-  return `<img src="${esc(url)}" alt="${esc(alt)}" loading="lazy" data-raw="${esc(src)}">`;
+  return `<img src="${esc(url)}" alt="${esc(alt)}" loading="lazy" data-raw="${esc(src)}"${at}>`;
 }
 
 /** A lone link on its own line is a bookmark: title, host, letter tile. */
-function bookmarkCard(title, href) {
+function bookmarkCard(title, href, at = "") {
   let host = href;
   try {
     host = new URL(href).host.replace(/^www\./, "");
@@ -379,7 +385,7 @@ function bookmarkCard(title, href) {
   for (const ch of host) hue = (hue * 31 + ch.charCodeAt(0)) % 360;
   const label = title && title !== href ? title : host;
   return (
-    `<a class="bookmark" href="${esc(href)}" data-external rel="noreferrer">` +
+    `<a class="bookmark" href="${esc(href)}" data-external rel="noreferrer"${at}>` +
     `<span class="bookmark-ico" style="--h:${hue}">${esc(host.charAt(0).toUpperCase() || "?")}</span>` +
     `<span class="bookmark-body">` +
     `<span class="bookmark-title">${esc(label)}</span>` +
@@ -390,6 +396,9 @@ function bookmarkCard(title, href) {
 
 export function renderMarkdown(src, ctx = {}) {
   const lines = String(src || "").replace(/\r\n?/g, "\n").split("\n");
+  // Every top-level block records the source lines it came from (end exclusive),
+  // so clicking it can put the caret back into those lines of the markdown.
+  const at = (kind, start, end) => ` data-line="${start}" data-end="${end}" data-kind="${kind}"`;
   const st = { task: 0 };
   let out = "";
   let i = 0;
@@ -417,7 +426,7 @@ export function renderMarkdown(src, ctx = {}) {
       const code = buf.join("\n");
       const label = LANG_LABEL[lang.toLowerCase()] || (lang ? lang.toUpperCase() : "Text");
       out +=
-        `<div class="md-code" data-line="${openLine}" data-lang="${esc(lang)}">` +
+        `<div class="md-code" data-line="${openLine}" data-end="${i}" data-kind="code" data-lang="${esc(lang)}">` +
         `<div class="md-code-bar">` +
         `<button class="md-code-lang" data-opens-menu="1" title="Change language">${esc(label)}</button>` +
         `<button class="md-code-copy" title="Copy code">Copy</button>` +
@@ -429,13 +438,13 @@ export function renderMarkdown(src, ctx = {}) {
     const h = line.match(HEADING_RE);
     if (h) {
       const level = h[1].length;
-      out += `<h${level}>${inline(h[2], ctx, st)}</h${level}>`;
+      out += `<h${level}${at("h" + level, i, i + 1)}>${inline(h[2], ctx, st)}</h${level}>`;
       i++;
       continue;
     }
 
     if (HR_RE.test(line)) {
-      out += "<hr>";
+      out += `<hr${at("hr", i, i + 1)}>`;
       i++;
       continue;
     }
@@ -465,7 +474,7 @@ export function renderMarkdown(src, ctx = {}) {
         i++;
       }
       out +=
-        "<table><thead><tr>" +
+        `<table${at("table", headLine, i)}><thead><tr>` +
         head.map((c, idx) => cell("th", c, idx, headLine)).join("") +
         "</tr></thead><tbody>" +
         body +
@@ -477,13 +486,14 @@ export function renderMarkdown(src, ctx = {}) {
     // image/video/file blocks — no paragraph wrapper, no stray line breaks.
     const soleMedia = line.match(/^\s*!\[([^\]]*)\]\(([^)\s]+)(?:\s+\S+)?\)\s*$/);
     if (soleMedia) {
-      out += mediaBlock(soleMedia[1], soleMedia[2], ctx);
+      out += mediaBlock(soleMedia[1], soleMedia[2], ctx, at("media", i, i + 1));
       i++;
       continue;
     }
 
     // blockquote / callout
     if (QUOTE_RE.test(line)) {
+      const qStart = i;
       const buf = [];
       while (i < lines.length && QUOTE_RE.test(lines[i])) {
         buf.push(lines[i].replace(/^\s{0,3}>\s?/, ""));
@@ -493,17 +503,18 @@ export function renderMarkdown(src, ctx = {}) {
       if (callout) {
         const info = CALLOUTS[callout[1].toLowerCase()] || ["💡", callout[1]];
         const rest = [callout[2], ...buf.slice(1)].join("\n").trim();
-        out += `<div class="callout"><div class="callout-icon">${info[0]}</div><div class="callout-body"><p><strong>${esc(
+        out += `<div class="callout"${at("callout", qStart, i)}><div class="callout-icon">${info[0]}</div><div class="callout-body"><p><strong>${esc(
           info[1]
         )}</strong></p>${rest ? renderMarkdown(rest, ctx) : ""}</div></div>`;
       } else {
-        out += `<blockquote>${renderMarkdown(buf.join("\n"), ctx)}</blockquote>`;
+        out += `<blockquote${at("quote", qStart, i)}>${renderMarkdown(buf.join("\n"), ctx)}</blockquote>`;
       }
       continue;
     }
 
     // list
     if (LIST_RE.test(line)) {
+      const listStart = i;
       const items = [];
       while (i < lines.length) {
         const l = lines[i];
@@ -513,6 +524,7 @@ export function renderMarkdown(src, ctx = {}) {
             indent: m[1].replace(/\t/g, "  ").length,
             ordered: /^\d/.test(m[2]),
             text: m[3],
+            line: i,
           });
           i++;
           continue;
@@ -525,11 +537,12 @@ export function renderMarkdown(src, ctx = {}) {
         }
         break;
       }
-      out += renderList(items, ctx, st);
+      out += renderList(items, ctx, st, at("list", listStart, i));
       continue;
     }
 
     // paragraph
+    const pStart = i;
     const buf = [line];
     i++;
     while (i < lines.length && lines[i].trim() && !isBlockStart(lines[i]) && !TABLE_SEP_RE.test(lines[i])) {
@@ -543,10 +556,10 @@ export function renderMarkdown(src, ctx = {}) {
       if (bare) sole = [bare[0], "", bare[1]];
     }
     if (sole) {
-      out += bookmarkCard(sole[1], sole[2]);
+      out += bookmarkCard(sole[1], sole[2], at("bookmark", pStart, i));
       continue;
     }
-    out += `<p>${inline(buf.join("\n"), ctx, st).replace(/\n/g, "<br>")}</p>`;
+    out += `<p${at("p", pStart, i)}>${inline(buf.join("\n"), ctx, st).replace(/\n/g, "<br>")}</p>`;
   }
 
   return out;

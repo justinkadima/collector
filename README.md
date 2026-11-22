@@ -51,8 +51,26 @@ still builds and runs with `-browser`.
 ## What it does
 
 - Sidebar tree with inline rename, drag-to-move, new page/folder, trash.
-- Read mode by default; click the body (or `⌘E`) to edit. Autosave, with an
-  optimistic-concurrency check so an edit made in vim doesn't get clobbered.
+- **The page is the editor.** There is no read mode and no write mode: click a
+  block and it becomes a text field shaped exactly like what you clicked — same
+  font, same size, in the same place — with its markdown markers (`## `, `- `,
+  the fences) hidden while you type and put back when you leave. Nothing about
+  the file changes: you are editing that line of the `.md`.
+- **Blocks are the unit.** `Enter` splits at the caret and carries the marker
+  over — a bullet stays a bullet, an ordered list counts up, a heading becomes a
+  heading again. `Enter` on an empty bullet or heading *ends* the structure
+  instead of adding another empty one, so leaving a list is one keypress.
+  `Backspace` at the start of a bullet whose neighbour isn't a bullet drops the
+  marker rather than gluing the text onto the paragraph above; `Backspace` after
+  the first character merges the block into the one above. `↑`/`↓` at the top and
+  bottom line walk to the neighbouring block, `Tab`/`Shift-Tab` indent.
+- **Whole blocks can be selected and cut.** `Shift`-click another block, drag
+  across blocks, or `Shift`-`↑`/`↓` from the edge of the block you are editing to
+  wash a run of blocks, then `Delete`/`Backspace` removes exactly those lines
+  from the file, or just start typing to replace the run. `Esc` drops the
+  selection. Inside one block, ordinary text selection still applies.
+- Autosave, with an optimistic-concurrency check so an edit made in vim doesn't
+  get clobbered.
 - `[[Wiki links]]` resolve by path or by name, and every page shows its
   backlinks. `⌘`-click or plain click opens them in place.
 - Typing `[[` opens a page browser at the caret, like Notion's link picker: every
@@ -206,7 +224,7 @@ diagnostics go to stderr; add `-log` to see what it's serving.
 | --- | --- |
 | `⌘P` | Search / create |
 | `⌘N` | New page (or a new row, inside a database) |
-| `⌘E` | Toggle read/write |
+| `Esc` | Drop a block selection |
 | `⌘\` | Show/hide sidebar |
 | `⌘S` | Save now |
 | `Esc` | Close menu / palette |
@@ -234,6 +252,8 @@ of the program that expects a client other than the UI.
 
 ## Not in scope
 
-Sync, accounts, a block editor, rollups, relations between databases, plugins.
+Sync, accounts, block ids or nesting containers, rollups, relations between
+databases, plugins. A block here is a line with a source range, not an object in
+a sidecar store — which is exactly why the file stays editable in vim.
 The point is a good desktop client for a folder of markdown, and the file format
 is the promise.
