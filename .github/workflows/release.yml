@@ -48,12 +48,13 @@ jobs:
           go-version-file: go.mod
           cache: true
 
-      - name: GTK and WebKitGTK
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev
-
+      # Built without cgo on purpose: a GTK build needs WebKitGTK 4.0 headers,
+      # which the current distros have dropped, and a binary linked against
+      # 4.0 would not start on them either. The CGO-free build runs everywhere
+      # and opens the same UI in the default browser.
       - name: Build
+        env:
+          CGO_ENABLED: "0"
         run: go build -trimpath -ldflags "-s -w" -o collector .
 
       - name: Package

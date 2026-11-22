@@ -58,15 +58,22 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          # The real window: WebKit on macOS, GTK + WebKitGTK on Linux.
+          # The real window: WebKit on macOS, GTK + WebKitGTK 4.0 on Ubuntu 22.04.
           - os: macos-latest
             cgo: "1"
-          - os: ubuntu-latest
+            webkit: "0"
+          - os: ubuntu-22.04
             cgo: "1"
-          # WebView2 needs a toolchain we do not install, so Windows builds the
-          # stub and runs in the browser. Same code, different door.
+            webkit: "1"
+          # Newer distros ship WebKitGTK 4.1 only, and WebView2 needs a toolchain
+          # we do not install, so both of these build the CGO-free stub and run in
+          # the browser. Same code, different door.
+          - os: ubuntu-latest
+            cgo: "0"
+            webkit: "0"
           - os: windows-latest
             cgo: "0"
+            webkit: "0"
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
@@ -77,10 +84,10 @@ jobs:
           cache: true
 
       - name: GTK and WebKitGTK
-        if: runner.os == 'Linux'
+        if: matrix.webkit == '1'
         run: |
           sudo apt-get update
-          sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev
+          sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.0-dev
 
       - name: Build
         env:

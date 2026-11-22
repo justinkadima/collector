@@ -38,9 +38,12 @@ collector -browser        # run as a local web app instead of a window
 ```
 
 Go 1.25 or newer. The native window is WebKit on macOS, GTK on Linux and WebView2
-on Windows, through cgo; with `CGO_ENABLED=0` the binary still builds and runs
-with `-browser`. From a checkout, `go build -o collector .` does the same thing
-`go install` does.
+on Windows, through cgo. On Linux that wants the WebKitGTK 4.0 headers at build
+time (`libwebkit2gtk-4.0-dev`, which Debian and Ubuntu 22.04 still have); newer
+distros ship 4.1 only, where `CGO_ENABLED=0 go install
+github.com/justinkadima/collector@latest` builds the same program and `-browser`
+opens your default browser instead of a GTK window. From a checkout, `go build -o
+collector .` does what `go install` does.
 
 On macOS there is also a bundle, which is what Finder, the Dock, Spotlight and
 the window's menu bar like best:
