@@ -15,7 +15,7 @@ import (
 	"strings"
 	"time"
 
-	"collector/internal/vault"
+	"github.com/justinkadima/collector/internal/vault"
 )
 
 // Attachments live in one folder at the vault root, so a page can link to them

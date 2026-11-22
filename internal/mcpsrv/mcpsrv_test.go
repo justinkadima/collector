@@ -10,8 +10,8 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
-	"collector/internal/index"
-	"collector/internal/vault"
+	"github.com/justinkadima/collector/internal/index"
+	"github.com/justinkadima/collector/internal/vault"
 )
 
 func fixture(t *testing.T) (*vault.Vault, *index.Index) {

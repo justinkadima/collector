@@ -1,4 +1,4 @@
-module collector
+module github.com/justinkadima/collector
 
 go 1.25.0
 

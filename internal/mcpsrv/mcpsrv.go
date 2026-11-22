@@ -18,8 +18,8 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
-	"collector/internal/index"
-	"collector/internal/vault"
+	"github.com/justinkadima/collector/internal/index"
+	"github.com/justinkadima/collector/internal/vault"
 )
 
 // Version is the version reported to MCP clients.

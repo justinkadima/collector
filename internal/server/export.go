@@ -17,7 +17,7 @@ import (
 	"strings"
 	"time"
 
-	"collector/internal/vault"
+	"github.com/justinkadima/collector/internal/vault"
 )
 
 // maxInline is the size above which an attachment is linked by absolute path

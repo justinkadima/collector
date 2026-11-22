@@ -18,12 +18,12 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
-	"collector/internal/app"
-	"collector/internal/config"
-	"collector/internal/index"
-	"collector/internal/mcpsrv"
-	"collector/internal/server"
-	"collector/internal/vault"
+	"github.com/justinkadima/collector/internal/app"
+	"github.com/justinkadima/collector/internal/config"
+	"github.com/justinkadima/collector/internal/index"
+	"github.com/justinkadima/collector/internal/mcpsrv"
+	"github.com/justinkadima/collector/internal/server"
+	"github.com/justinkadima/collector/internal/vault"
 )
 
 //go:embed web

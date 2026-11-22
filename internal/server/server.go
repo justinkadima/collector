@@ -23,9 +23,9 @@ import (
 
 	"github.com/fsnotify/fsnotify"
 
-	"collector/internal/config"
-	"collector/internal/index"
-	"collector/internal/vault"
+	"github.com/justinkadima/collector/internal/config"
+	"github.com/justinkadima/collector/internal/index"
+	"github.com/justinkadima/collector/internal/vault"
 )
 
 type Server struct {

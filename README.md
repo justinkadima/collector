@@ -1,23 +1,36 @@
 # Collector
 
-A Notion-shaped notes app that is really just a folder of markdown files.
+![A page, a table, an event and the calendar, all read from one folder of markdown](docs/screenshot.png)
 
-Point it at a directory — a project, an Obsidian vault, a folder of notes — and
-it gives you a sidebar tree, a page view with icons, backlinks, and full-text
-search. Everything it shows is read from `.md` files on disk. When you rename a
-page, the file is renamed. When you edit a page, the file is written. If you
-delete the app, your notes are still there, unchanged.
+A notes app that is really just a folder of markdown files.
 
+Point it at a directory — a project, a journal, a folder of notes — and it gives
+you a sidebar tree, a page view with icons, backlinks, databases, a calendar and
+full-text search. Everything it shows is read from `.md` files on disk. When you
+rename a page, the file is renamed. When you edit a page, the file is written. If
+you delete the app, your notes are still there, unchanged.
+
+- **One page, one `.md` file.** No database of your own words, no block ids, no
+  sidecar metadata, nothing to export.
+- **A single Go binary.** No account, no server of ours, no telemetry, and no
+  build step in front of the UI.
+- **The index is disposable.** Search lives in SQLite under `.collector/`;
+  delete that folder and it is rebuilt by walking yours.
+
+## Run it
+
+```sh
+go install github.com/justinkadima/collector@latest
+
+collector                 # opens the last workspace in a native window
+collector -w ~/Notes      # or a specific folder
+collector -browser        # run as a local web app instead of a window
 ```
-go build -o collector .
-./collector             # opens the last workspace in a native window
-./collector -w ~/Notes  # or a specific folder
-./collector -browser    # run as a local web app instead of a window
-```
 
-Requires Go 1.22+ and, for the native window, CGO. On macOS the window is
-WebKit; on Linux/Windows it is GTK/WebView2. With `CGO_ENABLED=0` the binary
-still builds and runs with `-browser`.
+Go 1.25 or newer. The native window is WebKit on macOS, GTK on Linux and WebView2
+on Windows, through cgo; with `CGO_ENABLED=0` the binary still builds and runs
+with `-browser`. From a checkout, `go build -o collector .` does the same thing
+`go install` does.
 
 On macOS there is also a bundle, which is what Finder, the Dock, Spotlight and
 the window's menu bar like best:
@@ -71,10 +84,12 @@ the tile.
 
 - Sidebar tree with inline rename, drag-to-move, new page/folder, trash.
 - **The page is the editor.** There is no read mode and no write mode: click a
-  block and it becomes a text field shaped exactly like what you clicked — same
-  font, same size, in the same place — with its markdown markers (`## `, `- `,
-  the fences) hidden while you type and put back when you leave. Nothing about
-  the file changes: you are editing that line of the `.md`.
+  block and it becomes a text field laid exactly over it — same font, same size,
+  same place — with its markdown markers (`## `, `- `, the fences) hidden while
+  you type and put back when you leave. The file never changes shape: you are
+  editing that line of the `.md`, and the textarea is the block you clicked. It
+  stays on its block even when the page above it reflows — an image finishing its
+  decode, a window resize — so it never drifts off to the wrong place.
 - **Blocks are the unit.** `Enter` splits at the caret and carries the marker
   over — a bullet stays a bullet, an ordered list counts up, a heading becomes a
   heading again. `Enter` on an empty bullet or heading *ends* the structure
@@ -83,12 +98,6 @@ the tile.
   marker rather than gluing the text onto the paragraph above; `Backspace` after
   the first character merges the block into the one above. `↑`/`↓` at the top and
   bottom line walk to the neighbouring block, `Tab`/`Shift-Tab` indent.
-- **The edit box is the block.** Clicking a paragraph, heading or bullet lays a
-  plain textarea exactly over it, in its own font and colour, and the textarea
-  is what you type into; the marker (`- `, `## `, `1. `) is hidden while you
-  edit and written back when you are done. The overlay stays on its block even
-  when the page above it changes height — an image finishing its decode, a
-  window resize — so it never drifts off to the wrong place.
 - **Whole blocks can be selected and cut.** `Shift`-click another block, drag
   across blocks, or `Shift`-`↑`/`↓` from the edge of the block you are editing to
   wash a run of blocks, then `Delete`/`Backspace` removes exactly those lines
@@ -106,7 +115,7 @@ the tile.
   get clobbered.
 - `[[Wiki links]]` resolve by path or by name, and every page shows its
   backlinks. `⌘`-click or plain click opens them in place.
-- Typing `[[` opens a page browser at the caret, like Notion's link picker: every
+- Typing `[[` opens a page browser at the caret: every
   page listed by icon and title, most recent first, with its folder on the right.
   Keep typing to filter (prefix, substring, then subsequence — `[[sprn` finds
   "Sprint notes"), `↑`/`↓`/`Tab` to move, `Enter` or a click to insert
@@ -127,7 +136,7 @@ the tile.
   Clicking empty paper always writes where you clicked: between two blocks it
   opens (or makes) the line at that height, under the last block it grows the
   page.
-- Tables have Notion-style menus for rows and columns. Hover any row — the
+- Tables have their own menus for rows and columns. Hover any row — the
   header row included — for an ellipsis at its left, or right-click a cell:
   insert row above/below, duplicate row, clear contents, delete row. The header
   row's handle opens the column menu, because a header cell *is* the column's
@@ -164,7 +173,7 @@ the tile.
   in as many lines and paragraphs as you like, for the notes the meeting will
   need. The block says *Event* on top, the row reads day · time · title, and
   the description sits under the title. Nothing else stores the event: a fence
-  is an ordinary code block, so the file reads fine in vim or Obsidian, and
+  is an ordinary code block, so the file reads fine in vim or any other editor, and
   deleting the index loses nothing. `/events` starts one, dated today.
   A fence with several event lines is what an older page (or a hand-written
   one) looks like; it still renders as a list, and works the same way.
@@ -339,3 +348,8 @@ files, and importing Google Calendar is a different program's job. A block here 
 a sidecar store — which is exactly why the file stays editable in vim.
 The point is a good desktop client for a folder of markdown, and the file format
 is the promise.
+
+## License
+
+MIT — see [LICENSE](LICENSE). The code is yours to use; the files it writes are
+yours already.
