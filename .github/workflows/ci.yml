@@ -75,6 +75,10 @@ jobs:
             cgo: "0"
             webkit: "0"
     runs-on: ${{ matrix.os }}
+    env:
+      # Every step in this job builds the same binary: the version check runs
+      # the program, and `go run` would otherwise pick the cgo path back up.
+      CGO_ENABLED: ${{ matrix.cgo }}
     steps:
       - uses: actions/checkout@v4
 
@@ -90,8 +94,6 @@ jobs:
           sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.0-dev
 
       - name: Build
-        env:
-          CGO_ENABLED: ${{ matrix.cgo }}
         run: go build ./...
 
       - name: It starts and knows its version
