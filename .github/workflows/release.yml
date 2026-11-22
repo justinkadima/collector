@@ -1,0 +1,116 @@
+name: Release
+
+# One tag, three downloads. A tag on its own gives nobody anything to run;
+# this attaches the built programs to the release GitHub makes for it.
+#
+#   git tag -a v0.8 -F msg && git push origin v0.8
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  macos:
+    name: macOS bundle
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Build Collector.app
+        run: ./scripts/bundle.sh
+
+      - name: Zip it
+        run: |
+          cd dist
+          ditto -c -k --keepParent Collector.app "Collector-${GITHUB_REF_NAME}-macOS-arm64.zip"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: macos
+          path: dist/*.zip
+          if-no-files-found: error
+
+  linux:
+    name: Linux binary
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: GTK and WebKitGTK
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev
+
+      - name: Build
+        run: go build -trimpath -ldflags "-s -w" -o collector .
+
+      - name: Package
+        run: |
+          tar -czf "Collector-${GITHUB_REF_NAME}-linux-amd64.tar.gz" collector LICENSE README.md
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux
+          path: "*.tar.gz"
+          if-no-files-found: error
+
+  windows:
+    name: Windows binary
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Build
+        env:
+          CGO_ENABLED: "0"
+        run: go build -trimpath -ldflags "-s -w" -o collector.exe .
+
+      - name: Package
+        run: |
+          Compress-Archive -Path collector.exe, LICENSE, README.md -DestinationPath "Collector-$env:GITHUB_REF_NAME-windows-amd64.zip"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows
+          path: "*.zip"
+          if-no-files-found: error
+
+  publish:
+    name: Attach to the release
+    needs: [macos, linux, windows]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: Create or update the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            gh release upload "$GITHUB_REF_NAME" dist/* --clobber
+          else
+            gh release create "$GITHUB_REF_NAME" dist/* \
+              --title "Collector ${GITHUB_REF_NAME#v}" \
+              --generate-notes
+          fi

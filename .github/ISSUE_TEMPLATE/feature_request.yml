@@ -1,0 +1,34 @@
+name: Feature request
+description: Something the app should do, without breaking the file format.
+labels: [enhancement]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        The one rule everything else bends around: what you write is a folder of
+        markdown files, and anything this app stores is a cache of them. If the
+        feature can be had without a second copy of your notes, it can be
+        considered — the README's "Not in scope" section says what has already
+        been decided against, and why.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: The problem
+      description: What you were trying to do when the app got in the way.
+    validations:
+      required: true
+
+  - type: textarea
+    id: idea
+    attributes:
+      label: What you would like it to do
+      description: The smallest version that solves the problem.
+
+  - type: textarea
+    id: format
+    attributes:
+      label: What it would write to the file
+      description: If the feature needs to store something, say where. Markdown, frontmatter, or nothing at all?
+      placeholder: |
+        Nothing — it can be derived from the fence each time.

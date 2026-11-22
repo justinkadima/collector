@@ -1,0 +1,54 @@
+name: Bug report
+description: Something the app did that the file on disk does not say.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        The page you were looking at is a file on disk — paste its markdown if you
+        can. A bug here is usually a disagreement between what the file says and
+        what the app showed.
+
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: The output of `collector -version`.
+      placeholder: collector 0.7.1
+    validations:
+      required: true
+
+  - type: dropdown
+    id: platform
+    attributes:
+      label: Where
+      options:
+        - macOS (native window)
+        - macOS (bundle in dist/)
+        - Linux (native window)
+        - Windows (browser fallback)
+        - Browser (-browser), any OS
+    validations:
+      required: true
+
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you did, what you saw, and what the file says instead.
+    validations:
+      required: true
+
+  - type: textarea
+    id: markdown
+    attributes:
+      label: The page, as markdown
+      description: The smallest file that shows it. Strip anything private.
+      render: markdown
+
+  - type: textarea
+    id: console
+    attributes:
+      label: Anything in the console
+      description: With `-debug` the window opens a web inspector; the browser fallback has one too.
+      render: shell

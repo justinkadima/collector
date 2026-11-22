@@ -1,8 +1,14 @@
 # Collector
 
+[![CI](https://github.com/justinkadima/collector/actions/workflows/ci.yml/badge.svg)](https://github.com/justinkadima/collector/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-3b3834.svg)](LICENSE)
+[![Release](https://img.shields.io/github/v/release/justinkadima/collector?label=release&color=2383e2)](https://github.com/justinkadima/collector/releases/latest)
+
 ![A page, a table, an event and the calendar, all read from one folder of markdown](docs/screenshot.png)
 
-A notes app that is really just a folder of markdown files.
+A desktop notes app for markdown files — one folder you choose, no account, no
+sync service, nothing in the cloud. Offline by default, and still yours if you
+delete it.
 
 Point it at a directory — a project, a journal, a folder of notes — and it gives
 you a sidebar tree, a page view with icons, backlinks, databases, a calendar and
@@ -18,6 +24,10 @@ you delete the app, your notes are still there, unchanged.
   delete that folder and it is rebuilt by walking yours.
 
 ## Run it
+
+If you would rather not have Go installed, [the latest
+release](https://github.com/justinkadima/collector/releases/latest) has a macOS
+`.app`, a Linux tarball and a Windows zip.
 
 ```sh
 go install github.com/justinkadima/collector@latest
