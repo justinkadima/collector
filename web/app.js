@@ -1087,6 +1087,8 @@ function bindEditor() {
     source: () => state.page?.body ?? "",
     render: (md) => renderInline(md, mdCtx()),
     commit: commitBody,
+    // Escape in a cell leaves the table and writes under it.
+    under: (line) => blocks?.openBlank(line),
     // Re-render after a row/column change, keeping the reader where they were.
     refresh: () => {
       const y = el.scroller.scrollTop;

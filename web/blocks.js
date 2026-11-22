@@ -908,6 +908,8 @@ export function initBlocks(opts) {
   return {
     refresh,
     openAtLine,
+    /** Write on a blank source line, making the line if it is taken. */
+    openBlank: openBlankAt,
     repaint: paint,
     reset() {
       if (edit) close(edit);

@@ -5,7 +5,10 @@
 // page source, so the .md file stays the only copy of the data.
 //
 // Enter saves and drops a row, Tab saves and moves right (Shift-Tab left),
-// Escape reverts, clicking away saves, pasting is always plain text.
+// Escape saves and puts a paragraph under the table — a table is the one block
+// you cannot press Enter out of, so there has to be a way out that is not the
+// mouse (Shift-Escape still throws the edit away). Clicking away saves, and
+// pasting is always plain text.
 
 let api = null;
 
@@ -113,7 +116,7 @@ function onKey(e) {
   if (e.key === "Escape") {
     e.preventDefault();
     e.stopPropagation();
-    finish(td, "revert");
+    finish(td, e.shiftKey ? "revert" : "under");
   }
 }
 
@@ -146,8 +149,7 @@ function finish(td, mode) {
   const text = mode === "revert" ? st.text : clean(td.textContent);
   // A watcher refresh may have replaced the table under us; do not splice a
   // detached cell into the (possibly reloaded) source.
-  if (!td.isConnected) return;
-  if (mode !== "revert" && text !== st.text) {
+  if (td.isConnected && mode !== "revert" && text !== st.text) {
     const src = api.source();
     const loc = locate(src, st.line, st.col);
     const next = src.slice(0, loc.start) + padded(loc.raw, text) + src.slice(loc.end);
@@ -161,6 +163,13 @@ function finish(td, mode) {
     td.classList.remove("cell-editing");
     td.innerHTML = api.render(text);
   };
+  if (mode === "under") {
+    // Out of the table: the line under it, made if need be.
+    const blk = tableBlock(api.source(), st.line);
+    restore();
+    api.under?.(blk ? blk.end + 1 : st.line + 1);
+    return;
+  }
   const dir = { down: [1, 0], right: [0, 1], left: [0, -1] }[mode];
   if (dir && focusNeighbour(td, dir[0], dir[1], mode === "right")) setTimeout(restore, 0);
   else restore();
