@@ -141,7 +141,8 @@ function previousLine(lines, from) {
 
 export function initBlocks(opts) {
   const { host, body, commit, render, key: appKey, caret: onCaret, editable } = opts;
-  let edit = null; // {unit, kind, start, end, meta, ta, orig, ghost}
+  let edit = null; // {unit, kind, start, end, meta, ta, orig, ghost, box}
+  let layoutWatch = null; // keeps the overlay on its block
   let lastBox = null;
 
   /* ---- starting and stopping an edit ---- */
@@ -170,8 +171,9 @@ export function initBlocks(opts) {
     unit.classList.add("block-hidden");
     unit.parentElement.insertBefore(ta, unit.nextSibling);
 
-    edit = { unit, kind, start, end, meta, ta, orig: text, ghost: unit.dataset.ghost === "1" };
+    edit = { unit, kind, start, end, meta, ta, orig: text, ghost: unit.dataset.ghost === "1", box };
     grow();
+    follow();
     ta.focus({ preventScroll: true });
     let off = at == null ? ta.value.length : Math.max(0, Math.min(at, ta.value.length));
     if (point) {
@@ -222,6 +224,27 @@ export function initBlocks(opts) {
     ta.style.width = Math.max(40, ub.width) + "px";
   }
 
+  /** Keep the overlay on its block when the page above it changes height.
+   *  Images arrive after the page does, fonts settle, a block grows: the
+   *  overlay is pinned in page coordinates, so without this it stays where the
+   *  block used to be while the block slides away. */
+  function follow() {
+    layoutWatch?.disconnect();
+    layoutWatch = null;
+    if (!edit) return;
+    const { ta, box } = edit;
+    if (typeof ResizeObserver !== "function") return;
+    const settle = () => {
+      if (!edit || edit.ta !== ta || !ta.isConnected) return;
+      place(ta, box);
+      grow();
+    };
+    layoutWatch = new ResizeObserver(settle);
+    layoutWatch.observe(host);
+    host.addEventListener("load", settle, true);
+    edit.settle = settle;
+  }
+
   function grow() {
     if (!edit) return;
     const { ta, unit } = edit;
@@ -238,6 +261,9 @@ export function initBlocks(opts) {
     ed.ta.removeEventListener("keydown", onKey);
     ed.ta.removeEventListener("blur", onBlur);
     ed.ta.remove();
+    layoutWatch?.disconnect();
+    layoutWatch = null;
+    if (ed.settle) host.removeEventListener("load", ed.settle, true);
     ed.unit.classList.remove("block-hidden");
     ed.unit.style.height = "";
     ed.unit.style.minHeight = "";

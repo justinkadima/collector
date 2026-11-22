@@ -64,6 +64,12 @@ still builds and runs with `-browser`.
   marker rather than gluing the text onto the paragraph above; `Backspace` after
   the first character merges the block into the one above. `↑`/`↓` at the top and
   bottom line walk to the neighbouring block, `Tab`/`Shift-Tab` indent.
+- **The edit box is the block.** Clicking a paragraph, heading or bullet lays a
+  plain textarea exactly over it, in its own font and colour, and the textarea
+  is what you type into; the marker (`- `, `## `, `1. `) is hidden while you
+  edit and written back when you are done. The overlay stays on its block even
+  when the page above it changes height — an image finishing its decode, a
+  window resize — so it never drifts off to the wrong place.
 - **Whole blocks can be selected and cut.** `Shift`-click another block, drag
   across blocks, or `Shift`-`↑`/`↓` from the edge of the block you are editing to
   wash a run of blocks, then `Delete`/`Backspace` removes exactly those lines
