@@ -2626,11 +2626,16 @@ body.is-db .page-meta {
 .md-events-list .ev {
   display: grid;
   grid-template-columns: 84px 88px minmax(0, 1fr) 18px;
-  align-items: baseline;
+  align-items: start;
   gap: 10px;
-  padding: 4px 12px 4px 12px;
+  padding: 5px 12px 5px 12px;
   font-size: 13.5px;
   line-height: 1.5;
+}
+/* Title and description stack in one column, so the description is under the
+   title, not under the time. */
+.md-events-list .ev-text {
+  min-width: 0;
 }
 .md-events-list .ev:hover {
   background: var(--hover);
@@ -2654,10 +2659,11 @@ body.is-db .page-meta {
   justify-self: end;
   align-self: center;
 }
-/* The block's own options are always there — the count sits beside them — so
-   the block can be added to or deleted without hunting for a hover. Row
-   options wait for the pointer, like every other row affordance. */
+/* The block's own options sit at the right of the bar, always visible — the bar
+   is a label, and a label does not hide its menu. Row options wait for the
+   pointer, like every other row affordance. */
 .md-events-more {
+  margin-left: auto;
   opacity: 0.55;
 }
 .md-events-list .ev:hover .ev-more,
@@ -2685,12 +2691,14 @@ body.is-db .page-meta {
   color: var(--accent);
   text-decoration: underline dotted;
 }
-.ev-bad {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 18px;
-  align-items: center;
-  gap: 10px;
-  padding: 4px 12px;
+/* Lines in a block that are not an event and have no event above them: shown
+   as written, faintly, so the block never hides what the file says. */
+.md-events-empty.ev-bad-lines {
+  font-family: var(--mono);
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--text-faint);
+  white-space: pre-wrap;
 }
 /* The day is a button too: the block's three fields are all editable, so the
    description is not the only thing you can change here. */
@@ -2721,10 +2729,34 @@ body.is-db .page-meta {
   font-style: italic;
 }
 .md-events-list .ev-title {
+  display: block;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+/* The description is prose the user wrote in the block: it keeps its line
+   breaks and its own quiet colour, because it is not part of the event's
+   headline. */
+.md-events-list .ev-desc {
+  margin-top: 1px;
+  max-width: 62ch;
+  color: var(--text-soft);
+  font-size: 12.8px;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  cursor: text;
+}
+.md-events-list .ev-desc:hover {
+  color: var(--text);
+}
+.md-events-list .ev-desc.empty {
+  color: var(--text-faint);
+  cursor: text;
+}
+.md-events-list .ev-desc.empty:hover {
+  color: var(--text-soft);
 }
 .md-events-list .ev.today .ev-day {
   color: var(--accent);
@@ -2734,17 +2766,12 @@ body.is-db .page-meta {
   font-size: 13px;
   color: var(--text-faint);
 }
-/* A line that is not an event yet — mid-typing, or a date with no title. It
-   is shown, faintly, so the page never hides what the file says. */
-.md-events-list .ev-raw {
-  font-size: 12.5px;
-  color: var(--text-faint);
-  opacity: 0.85;
-}
+
 /* One event, one block: it reads as an object, not as a table of them, so it
    takes only the width it needs. */
 .md-events.single {
   display: inline-block;
+  min-width: 460px;
   max-width: 100%;
   border-radius: 8px;
   background: var(--hover);
@@ -2753,9 +2780,9 @@ body.is-db .page-meta {
   padding: 0;
 }
 .md-events.single .md-events-list .ev {
-  grid-template-columns: auto auto minmax(60px, auto) 18px;
+  grid-template-columns: auto auto minmax(60px, 1fr) 18px;
   gap: 9px;
-  padding: 5px 8px 5px 11px;
+  padding: 5px 8px 6px 11px;
   border-radius: 7px;
   font-size: 13.5px;
 }
@@ -2763,12 +2790,13 @@ body.is-db .page-meta {
   background: var(--active);
 }
 .md-events.single .ev-title {
-  max-width: 46ch;
+  max-width: 52ch;
 }
 .md-events.single .ev.today .ev-day {
   color: var(--accent);
 }
-/* Typing over a description: the same text, in place, on a clean plate. */
+/* Typing over a field: the same text, in place, on a clean plate. */
+.ev-title-edit,
 .ev-desc-edit {
   position: fixed;
   z-index: 220;
@@ -2780,6 +2808,16 @@ body.is-db .page-meta {
   box-shadow: 0 0 0 1.5px var(--accent), 0 8px 22px rgba(0, 0, 0, 0.12);
   color: var(--text);
   line-height: inherit;
+}
+/* The description is prose: it wraps, it grows, and Escape/click-away commit
+   it the way the block editor does. */
+.ev-desc-edit {
+  padding: 3px 4px;
+  min-height: 34px;
+  resize: none;
+  overflow: hidden;
+  font-family: inherit;
+  white-space: pre-wrap;
 }
 [data-theme="dark"] .md-events {
   background: var(--code-bg);

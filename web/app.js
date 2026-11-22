@@ -11,7 +11,7 @@ import {
 } from "./cells.js";
 import { fetchDatabase, renderDatabase } from "./db.js";
 import { initBlocks } from "./blocks.js";
-import { initEvents, askEvent, insertBlock, editDescription } from "./events.js";
+import { initEvents, askEvent, insertBlock, editTitle } from "./events.js";
 import { initCalendar, toggleCalendar, refreshCalendar } from "./calendar.js";
 import { autoResize, caretCoords } from "./editor.js";
 
@@ -1350,7 +1350,7 @@ const SLASH_ITEMS = [
       setTimeout(() => {
         const rows = [...el.preview.querySelectorAll(".md-events.single .ev")];
         const last = rows[rows.length - 1];
-        if (last) editDescription(Number(last.dataset.evLine), { select: true });
+        if (last) editTitle(Number(last.dataset.evLine), { select: true });
       }, 90);
     },
     match: ["events", "event", "calendar", "agenda", "schedule", "date"],
@@ -2721,7 +2721,7 @@ async function addEventOn(date, start = "", end = "") {
   commitBody(lines.join("\n") + "\n", { rerender: true });
   await savePage();
   // The description is selected, so typing names the event.
-  setTimeout(() => editDescription(at, { select: true }), 60);
+  setTimeout(() => editTitle(at, { select: true }), 60);
 }
 
 /** The calendar's plus: a date and an optional time before it writes anything. */

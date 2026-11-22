@@ -403,13 +403,13 @@ const EVENT_LINE_RE = /^(\d{4}-\d{2}-\d{2})(?:\s+(\d{1,2}:\d{2})(?:\s*[-–]\s*(
 
 const evDate = new Intl.DateTimeFormat(undefined, { weekday: "short", day: "numeric", month: "short" });
 
+/**
+ * Read a block as events. Same grammar as internal/vault/events.go: a line that
+ * parses is an event, and every line after it that is not blank, not a # note,
+ * and not another event is its description.
+ */
 export function parseEvents(code) {
-  const out = [];
-  for (const line of String(code || "").split("\n")) {
-    const ev = parseEventLine(line);
-    if (ev) out.push(ev);
-  }
-  return out;
+  return eventRows(code, 0).map((r) => ({ ...r.ev, desc: r.desc }));
 }
 
 export function parseEventLine(line) {
@@ -425,7 +425,7 @@ export function parseEventLine(line) {
     if (!(h >= 0 && h < 24 && mi >= 0 && mi < 60)) return "";
     return String(h).padStart(2, "0") + ":" + String(mi).padStart(2, "0");
   };
-  const ev = { date: m[1], start: "", end: "", title, at };
+  const ev = { date: m[1], start: "", end: "", title, desc: "", at };
   if (m[2]) {
     ev.start = clock(m[2]);
     if (!ev.start || (m[3] && !clock(m[3]))) return null;
@@ -434,53 +434,74 @@ export function parseEventLine(line) {
   return ev;
 }
 
-/** An events fence renders as the thing it describes, not as source text. */
+/** The events of a block, with the line each was written on and its description. */
+function eventRows(code, openLine) {
+  const out = [];
+  let cur = null;
+  const lines = String(code || "").split("\n");
+  for (let i = 0; i < lines.length; i++) {
+    const ev = parseEventLine(lines[i]);
+    if (ev) {
+      cur = { ev, n: openLine + 1 + i, desc: "" };
+      out.push(cur);
+      continue;
+    }
+    if (!cur) continue; // text before the event belongs to nothing
+    const text = lines[i].trim();
+    if (!text && !cur.desc) continue; // leading blanks do not start a description
+    cur.desc = cur.desc ? cur.desc + "\n" + text : text;
+  }
+  for (const row of out) row.desc = row.desc.replace(/\n+$/, "");
+  return out;
+}
+
+/**
+ * An events fence renders as the thing it describes, not as source text.
+ *
+ * One block is one event: the label says Event, the row is the day, the time
+ * and the title, and the description sits under the title. A block with
+ * several events (an older page, or a hand-written one) reads as a list, and
+ * only a block on its own asks for a description.
+ */
 function eventsBlock(code, at, openLine = 0) {
-  const rows = String(code || "")
-    .split("\n")
-    .map((line, i) => ({ line, ev: parseEventLine(line), n: openLine + 1 + i }))
-    .filter((r) => r.line.trim());
-  const events = rows.filter((r) => r.ev).length;
+  const body = String(code || "");
+  const rows = eventRows(body, openLine);
+  const single = rows.length === 1;
   const today = isoToday();
 
-  const row = (r) => {
-    const more = `<button class="ev-more" title="Event options" aria-label="Event options">⋯</button>`;
-    const n = ` data-ev-line="${r.n}"`;
-    if (!r.ev) {
+  const more = `<button class="ev-more" title="Event options" aria-label="Event options">⋯</button>`;
+  const html = rows
+    .map(({ ev, n, desc }) => {
+      const when = ev.start ? (ev.end ? ev.start + "–" + ev.end : ev.start) : "all day";
+      const hint = desc ? "Change the description" : "Add a description";
       return (
-        `<li class="ev-bad"${n} title="Not an event yet — a line reads: 2026-11-24 09:30 Title">` +
-        `<span class="ev-raw">${esc(r.line.trim())}</span>${more}</li>`
+        `<li class="ev${ev.date === today ? " today" : ""}" data-ev-line="${n}">` +
+        `<button class="ev-day" title="Change the day">${esc(evDate.format(ev.at))}</button>` +
+        `<button class="ev-time${ev.start ? "" : " all"}" title="Change the time">${esc(when)}</button>` +
+        `<div class="ev-text">` +
+        `<span class="ev-title" title="Change the title">${esc(ev.title)}</span>` +
+        `<div class="ev-desc${desc ? "" : " empty"}" title="${hint}">${
+          desc ? esc(desc) : single ? "Add a description…" : ""
+        }</div>` +
+        `</div>` +
+        more +
+        `</li>`
       );
-    }
-    const ev = r.ev;
-    const when = ev.start ? (ev.end ? ev.start + "–" + ev.end : ev.start) : "all day";
-    return (
-      `<li class="ev${ev.date === today ? " today" : ""}"${n}>` +
-      `<button class="ev-day" title="Change the day">${esc(evDate.format(ev.at))}</button>` +
-      `<button class="ev-time${ev.start ? "" : " all"}" title="Change the time">${esc(when)}</button>` +
-      `<span class="ev-title" title="Change the description">${esc(ev.title)}</span>` +
-      more +
-      `</li>`
-    );
-  };
+    })
+    .join("");
 
-  // One event is a block, not a list: no bar, no count, just the event. A fence
-  // with several lines is what an older page (or a hand-written one) looks
-  // like, and it still reads as a list.
-  const single = rows.length === 1;
-  const bar = single
-    ? ""
-    : `<div class="md-events-bar"><span class="md-events-label">Events</span>` +
-      `<span class="md-events-count">${events}</span>` +
-      `<button class="md-events-more" title="Events options" aria-label="Events options">⋯</button></div>`;
+  const bar =
+    `<div class="md-events-bar"><span class="md-events-label">${rows.length > 1 ? "Events" : "Event"}</span>` +
+    (rows.length > 1 ? `<span class="md-events-count">${rows.length}</span>` : "") +
+    `<button class="md-events-more" title="Block options" aria-label="Block options">⋯</button></div>`;
 
-  return (
-    `<div class="md-events${single ? " single" : ""}"${at}>` +
-    bar +
-    `<div class="md-events-body">` +
-    (rows.length ? `<ul class="md-events-list">${rows.map(row).join("")}</ul>` : `<div class="md-events-empty">No events yet.</div>`) +
-    `</div></div>`
-  );
+  const inner = html
+    ? `<ul class="md-events-list">${html}</ul>`
+    : body.trim()
+      ? `<div class="md-events-empty ev-bad-lines">${esc(body.trim())}</div>`
+      : `<div class="md-events-empty">No events yet.</div>`;
+
+  return `<div class="md-events${single ? " single" : ""}"${at}>${bar}<div class="md-events-body">${inner}</div></div>`;
 }
 
 const isoToday = () => {

@@ -1,17 +1,26 @@
 // The events block: one block, one event.
 //
-// An events block is a ```events fence holding one line —
-// `2026-11-24 09:30 Design review`. This module owns the three fields of that
-// line (day, time, description) and the block's own menu. Every action is a
-// splice of source lines, so the page stays the only copy: changing the day
-// rewrites the date, changing a description rewrites the text after it.
+// An events block is a ```events fence. Its first line is the event —
+// `2026-11-24 09:30 Design review` — and every line after it that is not
+// another event is the description:
 //
-// A fence with several lines is still rendered as a list (older pages, or
-// hand-written ones); the same controls work row by row.
+//     ```events
+//     2026-11-24 09:30 Design review
+//     Bring the deck.
+//     Agenda: pricing and hiring
+//     ```
+//
+// This module owns those fields and the block's own menu. Every action is a
+// splice of source lines, so the page stays the only copy: changing the day
+// rewrites the date, changing a title rewrites the text after the time, and
+// the description is the lines between this event and the next one.
+//
+// A fence with several events (an older page, or a hand-written one) renders as
+// a list; the same controls work row by row.
 
 import { parseEventLine } from "./markdown.js";
 
-let api = null; // { host, source, commit, openAt, menu }
+let api = null; // { host, source, commit, menu }
 
 export function initEvents(hooks) {
   api = hooks;
@@ -61,6 +70,16 @@ export function lastFence(src) {
   return null;
 }
 
+/** The events fence whose body holds `line`, as its opening line number. */
+function enclosingFence(src, line) {
+  for (let i = Math.min(line, src.length - 1); i >= 0; i--) {
+    if (!FENCE_RE.test(src[i])) continue;
+    const range = fenceAt(src, i);
+    return range && line > range[0] && line < range[1] ? range[0] : null;
+  }
+  return null;
+}
+
 /** One event, one block: a fence holding a single line. */
 export function insertBlock(src, line) {
   const last = lastFence(src);
@@ -83,17 +102,17 @@ export function insertBlock(src, line) {
 }
 
 /** A new block right after the one that opens on `openLine`. */
-function insertAfter(src, openLine, line) {
+function insertAfter(src, openLine, body) {
   const range = fenceAt(src, openLine);
   if (!range) return null;
   const at = range[1] + 1;
-  src.splice(at, 0, "", "```events", line, "```");
+  src.splice(at, 0, "", "```events", ...body, "```");
   return at + 2;
 }
 
 /* ---------- field edits ---------- */
 
-/** Change one field of an event, keeping everything else on the line. */
+/** Change one field of an event line, keeping everything else on it. */
 function setFields(line, patch) {
   const out = lines();
   const cur = parseEventLine(out[line]);
@@ -102,14 +121,22 @@ function setFields(line, patch) {
   write(out);
 }
 
-/** The events fence whose body holds `line`, as its opening line number. */
-function enclosingFence(src, line) {
-  for (let i = Math.min(line, src.length - 1); i >= 0; i--) {
-    if (!FENCE_RE.test(src[i])) continue;
-    const range = fenceAt(src, i);
-    return range && line > range[0] && line < range[1] ? range[0] : null;
-  }
-  return null;
+/** Replace the description: the lines after this event, up to the next one. */
+function setDescription(line, text) {
+  const out = lines();
+  if (!parseEventLine(out[line])) return;
+  const open = enclosingFence(out, line);
+  if (open == null) return;
+  const range = fenceAt(out, open);
+  let end = line + 1;
+  while (end < range[1] && !parseEventLine(out[end])) end++;
+  const body = String(text || "")
+    .replace(/\r/g, "")
+    .split("\n")
+    .map((l) => l.replace(/\s+$/, ""));
+  while (body.length && !body[body.length - 1].trim()) body.pop();
+  out.splice(line + 1, end - line - 1, ...body);
+  write(out);
 }
 
 /** Take the fence out, and the blank line it was separated by. */
@@ -128,7 +155,7 @@ function deleteLine(line) {
   // exist, so the block goes too.
   if (open != null) {
     const range = fenceAt(out, open);
-    if (range && !out.slice(range[0] + 1, range[1]).some((l) => l.trim())) return removeFence(out, range);
+    if (range && !out.slice(range[0] + 1, range[1]).some((l) => parseEventLine(l))) return removeFence(out, range);
   }
   write(out);
 }
@@ -141,66 +168,41 @@ function deleteBlock(openLine) {
 
 function duplicate(line, openLine) {
   const out = lines();
-  const text = (out[line] || "").trim();
-  if (!text || !insertAfterInto(out, openLine, text)) return;
+  const range = fenceAt(out, openLine);
+  if (!range) return;
+  const body = out.slice(line, range[1]).filter((l) => !FENCE_RE.test(l) && !CLOSE_RE.test(l));
+  while (body.length && !body[body.length - 1].trim()) body.pop();
+  if (!body.length) return;
+  if (insertAfter(out, openLine, body) == null) return;
   write(out);
 }
 
-function insertAfterInto(out, openLine, text) {
-  const at = insertAfter(out, openLine, text);
-  return at != null;
+/* ---------- editing a field in place ---------- */
+
+function plateOver(span) {
+  const box = span.getBoundingClientRect();
+  const cs = getComputedStyle(span);
+  return {
+    box,
+    css: { font: cs.font, color: cs.color, "font-size": cs.fontSize, "line-height": cs.lineHeight },
+  };
 }
 
-/* ---------- the block's controls ---------- */
-
-async function setDay(line, ev, x, y) {
-  const pick = await askEvent({ date: ev.date, mode: "date", head: "Day", x, y });
-  if (!pick) return;
-  setFields(line, { date: pick.date });
-}
-
-async function setTime(line, ev, x, y) {
-  const pick = await askEvent({ date: ev.date, start: ev.start, end: ev.end, mode: "time", head: ev.title, x, y });
-  if (!pick) return;
-  setFields(line, { start: pick.start, end: pick.end });
-}
-
-async function addBlock(openLine, x, y) {
-  const pick = await askEvent({ date: todayISO(), mode: "full", head: "New event", x, y });
-  if (!pick) return;
-  const out = lines();
-  const line = eventLine({ ...pick, title: "New event" });
-  const at = insertAfter(out, openLine, line);
-  if (at == null) return;
-  write(out);
-  setTimeout(() => editDescription(at, { select: true }), 60);
-}
-
-/**
- * Type over an event's description in place. Enter or clicking away writes the
- * line; Esc leaves it as it was. `select` swaps the whole text, which is what
- * a freshly added event wants.
- */
-export function editDescription(line, { select = false } = {}) {
+/** Type over an event's title. Enter or clicking away writes it; Esc does not. */
+export function editTitle(line, { select = false } = {}) {
   const row = api?.host?.querySelector(`[data-ev-line="${line}"]`);
   const span = row?.querySelector(".ev-title");
   const ev = parseEventLine(lines()[line]);
   if (!span || !ev) return false;
 
-  const box = span.getBoundingClientRect();
-  const cs = getComputedStyle(span);
+  const { box, css } = plateOver(span);
+  const card = span.closest(".md-events")?.getBoundingClientRect();
+  const room = card ? card.right + 8 - box.left : Math.max(box.width, 160) + 8;
   const input = document.createElement("input");
-  input.className = "ev-desc-edit";
+  input.className = "ev-title-edit";
   input.value = ev.title;
   input.spellcheck = false;
-  Object.assign(input.style, {
-    left: Math.round(box.left) + "px",
-    top: Math.round(box.top) + "px",
-    width: Math.round(Math.max(box.width, 140) + 8) + "px",
-    height: Math.round(box.height) + "px",
-    font: cs.font,
-    color: cs.color,
-  });
+  setLeftTop(input, box.left, box.top, Math.max(160, Math.min(Math.max(box.width, 160) + 8, room)), box.height, css);
   document.body.appendChild(input);
   input.focus();
   if (select) input.select();
@@ -228,21 +230,122 @@ export function editDescription(line, { select = false } = {}) {
   return true;
 }
 
+/**
+ * The description: a small multiline field under the title. It is prose, so it
+ * keeps its own line breaks — Enter is a new line, Esc leaves it as it was, and
+ * anything that takes the focus away writes it.
+ */
+export function editDescription(line) {
+  const row = api?.host?.querySelector(`[data-ev-line="${line}"]`);
+  const el = row?.querySelector(".ev-desc");
+  const ev = parseEventLine(lines()[line]);
+  if (!el || !ev) return false;
+
+  const { box, css } = plateOver(el);
+  // Stay inside the card: the plate is the description, not a popover.
+  const card = el.closest(".md-events")?.getBoundingClientRect();
+  const room = card ? card.right + 8 - box.left : Math.max(box.width, 220);
+  const ta = document.createElement("textarea");
+  ta.className = "ev-desc-edit";
+  ta.value = currentDescription(line);
+  ta.spellcheck = false;
+  ta.rows = 2;
+  setLeftTop(ta, box.left, box.top, Math.max(170, Math.min(Math.max(box.width + 6, 220), room)), Math.max(box.height, 34), css);
+  document.body.appendChild(ta);
+  grow(ta);
+  ta.focus();
+  ta.setSelectionRange(ta.value.length, ta.value.length);
+
+  let done = false;
+  const finish = (save) => {
+    if (done) return;
+    done = true;
+    ta.remove();
+    if (save) setDescription(line, ta.value);
+  };
+  ta.addEventListener("input", () => grow(ta));
+  ta.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") {
+      e.preventDefault();
+      finish(false);
+    } else if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+      e.preventDefault();
+      finish(true);
+    }
+    e.stopPropagation();
+  });
+  ta.addEventListener("blur", () => finish(true));
+  return true;
+}
+
+/** The description as the file has it: everything between this event and the next. */
+function currentDescription(line) {
+  const out = lines();
+  const open = enclosingFence(out, line);
+  if (open == null) return "";
+  const range = fenceAt(out, open);
+  const body = [];
+  for (let i = line + 1; i < range[1] && !parseEventLine(out[i]); i++) body.push(out[i]);
+  while (body.length && !body[body.length - 1].trim()) body.pop();
+  return body.join("\n").replace(/^\n+/, "");
+}
+
+function grow(ta) {
+  ta.style.height = "auto";
+  ta.style.height = Math.max(34, ta.scrollHeight) + "px";
+}
+
+function setLeftTop(el, left, top, width, height, css) {
+  Object.assign(el.style, css, {
+    left: Math.round(left) + "px",
+    top: Math.round(top) + "px",
+    width: Math.round(width) + "px",
+    height: Math.round(height) + "px",
+  });
+}
+
+/* ---------- the block's controls ---------- */
+
+async function setDay(line, ev, x, y) {
+  const pick = await askEvent({ date: ev.date, mode: "date", head: "Day", x, y });
+  if (!pick) return;
+  setFields(line, { date: pick.date });
+}
+
+async function setTime(line, ev, x, y) {
+  const pick = await askEvent({ date: ev.date, start: ev.start, end: ev.end, mode: "time", head: ev.title, x, y });
+  if (!pick) return;
+  setFields(line, { start: pick.start, end: pick.end });
+}
+
+async function addBlock(openLine, x, y) {
+  const pick = await askEvent({ date: todayISO(), mode: "full", head: "New event", x, y });
+  if (!pick) return;
+  const out = lines();
+  const at = insertAfter(out, openLine, [eventLine({ ...pick, title: "New event" })]);
+  if (at == null) return;
+  write(out);
+  setTimeout(() => editTitle(at, { select: true }), 60);
+}
+
 function onClick(e) {
-  const bar = e.target.closest?.(".md-events-more");
-  const more = bar ? null : e.target.closest?.(".ev-more");
-  const day = bar || more ? null : e.target.closest?.(".ev-day");
-  const time = bar || more || day ? null : e.target.closest?.(".ev-time");
-  const desc = bar || more || day || time ? null : e.target.closest?.(".ev-title");
-  if (!bar && !more && !day && !time && !desc) return;
+  const target = e.target;
+  const bar = target.closest?.(".md-events-more");
+  const more = bar ? null : target.closest?.(".ev-more");
+  const picking = bar || more;
+  const day = picking ? null : target.closest?.(".ev-day");
+  const time = picking || day ? null : target.closest?.(".ev-time");
+  const title = picking || day || time ? null : target.closest?.(".ev-title");
+  const desc = picking || day || time || title ? null : target.closest?.(".ev-desc");
+  if (!bar && !more && !day && !time && !title && !desc) return;
   e.preventDefault();
   e.stopPropagation();
 
   const x = e.clientX || 0;
   const y = e.clientY || 0;
-  const card = e.target.closest(".md-events");
+  const card = target.closest(".md-events");
   const open = Number(card?.dataset.line);
-  const n = Number(e.target.closest(".ev, .ev-bad")?.dataset.evLine);
+  const n = Number(target.closest(".ev")?.dataset.evLine);
   const line = Number.isFinite(n) ? n : -1;
   const ev = line >= 0 ? parseEventLine(lines()[line]) : null;
 
@@ -262,11 +365,14 @@ function onClick(e) {
 
   if (day) return void setDay(line, ev, x, y);
   if (time) return void setTime(line, ev, x, y);
+  if (title) return void editTitle(line);
   if (desc) return void editDescription(line);
 
   const items = [{ label: ev.start ? "Change time…" : "Set time…", icon: "clock", action: () => setTime(line, ev, x, y) }];
   if (ev.start) items.push({ label: "Make it all day", icon: "calendar", action: () => setFields(line, { start: "", end: "" }) });
   items.push({ label: "Change day…", icon: "calendar", action: () => setDay(line, ev, x, y) });
+  items.push("-", { label: "Rename…", icon: "pencil", action: () => editTitle(line, { select: true }) });
+  items.push({ label: "Description", icon: "file", action: () => editDescription(line) });
   items.push("-", { label: "Duplicate event", icon: "copy", action: () => duplicate(line, open) });
   items.push({ label: "Delete event", icon: "trash", danger: true, action: () => deleteLine(line) });
   api.menu(x, y, items);
@@ -323,7 +429,6 @@ export function askEvent({ date = todayISO(), start = "", end = "", mode = "full
       const s = startIn?.value || "";
       const e = endIn?.value || "";
       if (!d) return;
-      // An end without a start is meaningless: keep the range the right way up.
       finish({ date: d, start: withTime ? s : start, end: withTime && s ? e : end });
     };
     node.querySelector(".url-add").onclick = submit;
