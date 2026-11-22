@@ -75,7 +75,8 @@ still builds and runs with `-browser`.
   heading, a table keeps its rows, a list item takes its indented children — and
   a single blank line is left between whatever ends up adjoining. Dropping the
   handle of a block inside a selection moves the whole selection. Dragging to
-  the edge of the window scrolls the page.
+  the edge of the window scrolls the page. A table is grabbed from the gutter,
+  not from its own edge: there the handles belong to its rows and columns.
 - Autosave, with an optimistic-concurrency check so an edit made in vim doesn't
   get clobbered.
 - `[[Wiki links]]` resolve by path or by name, and every page shows its
@@ -102,7 +103,7 @@ still builds and runs with `-browser`.
   opens (or makes) the line at that height, under the last block it grows the
   page.
 - Tables have Notion-style menus for rows and columns. Hover a body row for the
-  six-dot handle on its left, or right-click a cell: insert row above/below,
+  ellipsis handle on its left, or right-click a cell: insert row above/below,
   duplicate row, clear contents, delete row. Hover the header for the handle
   above the column, or right-click a header cell: insert column left/right,
   clear contents, delete column. Both are filtered by a "Search actions…" box,

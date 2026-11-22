@@ -361,13 +361,12 @@ export function openCellMenu(cell, point) {
 
 /* ------------------------------------------------------- row/column grips */
 
+// An ellipsis, not a grip: these two open a menu. The six-dot grid in the
+// gutter is the block handle, and it drags.
 const ROW_DOTS =
-  '<circle cx="9" cy="6" r="1.5"/><circle cx="15" cy="6" r="1.5"/>' +
-  '<circle cx="9" cy="12" r="1.5"/><circle cx="15" cy="12" r="1.5"/>' +
-  '<circle cx="9" cy="18" r="1.5"/><circle cx="15" cy="18" r="1.5"/>';
+  '<circle cx="6" cy="12" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="18" cy="12" r="1.7"/>';
 const COL_DOTS =
-  '<circle cx="6" cy="9" r="1.5"/><circle cx="12" cy="9" r="1.5"/><circle cx="18" cy="9" r="1.5"/>' +
-  '<circle cx="6" cy="15" r="1.5"/><circle cx="12" cy="15" r="1.5"/><circle cx="18" cy="15" r="1.5"/>';
+  '<circle cx="12" cy="6" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="12" cy="18" r="1.7"/>';
 
 const grips = { row: { el: null, cell: null }, col: { el: null, cell: null } };
 let hideTimer = 0;

@@ -919,15 +919,35 @@ export function initBlocks(opts) {
     gripHide = setTimeout(hideGrip, 200);
   }
 
-  host.addEventListener("mousemove", (e) => {
+  /** The block at height `y` whose left gutter holds `x`. */
+  function unitAt(y, x) {
+    for (const el of tops()) {
+      const r = el.getBoundingClientRect();
+      if (y < r.top - 8 || y > r.bottom + 8) continue;
+      return x < r.left - 2 && x > r.left - 72 ? el : null;
+    }
+    return null;
+  }
+
+  // Tracked document-wide, because the handle lives in the gutter — outside the
+  // page's text column, where `#preview` never sees a mousemove.
+  document.addEventListener("mousemove", (e) => {
     if (drag) return;
     if (e.target.closest?.(".block-grip")) return;
-    const unit = unitOf(e.target);
+    const over = host.contains(e.target) ? unitOf(e.target) : null;
+    if (over) {
+      // A table's own handles sit at its left and top edge; the block handle
+      // steps aside so a click there reaches the row or column menu. Drag a
+      // table by its gutter, like any other block.
+      if (over.dataset.kind === "table") return scheduleHide();
+      return placeGrip(over);
+    }
+    // The gutter is only a gutter next to the page: over the sidebar it is the
+    // sidebar.
+    if (e.target.closest?.("#sidebar")) return scheduleHide();
+    const unit = unitAt(e.clientY, e.clientX);
     if (!unit) return scheduleHide();
     placeGrip(unit);
-  });
-  host.addEventListener("mouseleave", () => {
-    if (!drag) scheduleHide();
   });
   // The handle is positioned in viewport coordinates, so scrolling moves the
   // block out from under it.
