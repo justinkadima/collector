@@ -394,6 +394,121 @@ function bookmarkCard(title, href, at = "") {
   );
 }
 
+/* ----------------------------------------------------------------- events */
+
+// One line of an ```events fence: a date, an optional time or time range, then a
+// title. This is the same grammar the Go side indexes (internal/vault/events.go)
+// — the fence is the only copy of an event, so both readers must agree.
+const EVENT_LINE_RE = /^(\d{4}-\d{2}-\d{2})(?:\s+(\d{1,2}:\d{2})(?:\s*[-–]\s*(\d{1,2}:\d{2}))?)?\s+(\S.*)$/;
+
+const evDate = new Intl.DateTimeFormat(undefined, { weekday: "short", day: "numeric", month: "short" });
+
+/**
+ * Read a block as events. Same grammar as internal/vault/events.go: a line that
+ * parses is an event, and every line after it that is not blank, not a # note,
+ * and not another event is its description.
+ */
+export function parseEvents(code) {
+  return eventRows(code, 0).map((r) => ({ ...r.ev, desc: r.desc }));
+}
+
+export function parseEventLine(line) {
+  const m = String(line || "").trim().match(EVENT_LINE_RE);
+  if (!m) return null;
+  const [y, mo, d] = m[1].split("-").map(Number);
+  const at = new Date(y, mo - 1, d);
+  if (at.getFullYear() !== y || at.getMonth() !== mo - 1 || at.getDate() !== d) return null;
+  const title = m[4].trim();
+  if (!title || title.startsWith("#")) return null;
+  const clock = (v) => {
+    const [h, mi] = v.split(":").map(Number);
+    if (!(h >= 0 && h < 24 && mi >= 0 && mi < 60)) return "";
+    return String(h).padStart(2, "0") + ":" + String(mi).padStart(2, "0");
+  };
+  const ev = { date: m[1], start: "", end: "", title, desc: "", at };
+  if (m[2]) {
+    ev.start = clock(m[2]);
+    if (!ev.start || (m[3] && !clock(m[3]))) return null;
+    if (m[3]) ev.end = clock(m[3]);
+  }
+  return ev;
+}
+
+/** The events of a block, with the line each was written on and its description. */
+function eventRows(code, openLine) {
+  const out = [];
+  let cur = null;
+  const lines = String(code || "").split("\n");
+  for (let i = 0; i < lines.length; i++) {
+    const ev = parseEventLine(lines[i]);
+    if (ev) {
+      cur = { ev, n: openLine + 1 + i, desc: "" };
+      out.push(cur);
+      continue;
+    }
+    if (!cur) continue; // text before the event belongs to nothing
+    const text = lines[i].trim();
+    if (!text && !cur.desc) continue; // leading blanks do not start a description
+    cur.desc = cur.desc ? cur.desc + "\n" + text : text;
+  }
+  for (const row of out) row.desc = row.desc.replace(/\n+$/, "");
+  return out;
+}
+
+/**
+ * An events fence renders as the thing it describes, not as source text.
+ *
+ * One block is one event: the label says Event, the row is the day, the time
+ * and the title, and the description sits under the title. A block with
+ * several events (an older page, or a hand-written one) reads as a list, and
+ * only a block on its own asks for a description.
+ */
+function eventsBlock(code, at, openLine = 0) {
+  const body = String(code || "");
+  const rows = eventRows(body, openLine);
+  const single = rows.length === 1;
+  const today = isoToday();
+
+  const more = `<button class="ev-more" title="Event options" aria-label="Event options">⋯</button>`;
+  const html = rows
+    .map(({ ev, n, desc }) => {
+      const when = ev.start ? (ev.end ? ev.start + "–" + ev.end : ev.start) : "all day";
+      const hint = desc ? "Change the description" : "Add a description";
+      return (
+        `<li class="ev${ev.date === today ? " today" : ""}" data-ev-line="${n}">` +
+        `<button class="ev-day" title="Change the day">${esc(evDate.format(ev.at))}</button>` +
+        `<button class="ev-time${ev.start ? "" : " all"}" title="Change the time">${esc(when)}</button>` +
+        `<div class="ev-text">` +
+        `<span class="ev-title" title="Change the title">${esc(ev.title)}</span>` +
+        `<div class="ev-desc${desc ? "" : " empty"}" title="${hint}">${
+          desc ? esc(desc) : single ? "Add a description…" : ""
+        }</div>` +
+        `</div>` +
+        more +
+        `</li>`
+      );
+    })
+    .join("");
+
+  const bar =
+    `<div class="md-events-bar"><span class="md-events-label">${rows.length > 1 ? "Events" : "Event"}</span>` +
+    (rows.length > 1 ? `<span class="md-events-count">${rows.length}</span>` : "") +
+    `<button class="md-events-more" title="Block options" aria-label="Block options">⋯</button></div>`;
+
+  const inner = html
+    ? `<ul class="md-events-list">${html}</ul>`
+    : body.trim()
+      ? `<div class="md-events-empty ev-bad-lines">${esc(body.trim())}</div>`
+      : `<div class="md-events-empty">No events yet.</div>`;
+
+  return `<div class="md-events${single ? " single" : ""}"${at}>${bar}<div class="md-events-body">${inner}</div></div>`;
+}
+
+const isoToday = () => {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+};
+
 export function renderMarkdown(src, ctx = {}) {
   const lines = String(src || "").replace(/\r\n?/g, "\n").split("\n");
   // Every top-level block records the source lines it came from (end exclusive),
@@ -424,6 +539,10 @@ export function renderMarkdown(src, ctx = {}) {
       }
       i++; // closing fence (or EOF)
       const code = buf.join("\n");
+      if (lang.toLowerCase() === "events") {
+        out += eventsBlock(code, at("events", openLine, i), openLine);
+        continue;
+      }
       const label = LANG_LABEL[lang.toLowerCase()] || (lang ? lang.toUpperCase() : "Text");
       out +=
         `<div class="md-code" data-line="${openLine}" data-end="${i}" data-kind="code" data-lang="${esc(lang)}">` +

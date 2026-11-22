@@ -123,6 +123,7 @@ func (s *Server) routes() http.Handler {
 	mux.HandleFunc("POST /api/prop", auth(s.handleSetProp))
 	mux.HandleFunc("GET /api/search", auth(s.handleSearch))
 	mux.HandleFunc("GET /api/pages", auth(s.handlePages))
+	mux.HandleFunc("GET /api/agenda", auth(s.handleAgenda))
 	mux.HandleFunc("GET /api/recent", auth(s.handleRecent))
 	mux.HandleFunc("GET /api/backlinks", auth(s.handleBacklinks))
 	mux.HandleFunc("GET /api/resolve", auth(s.handleResolve))

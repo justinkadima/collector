@@ -6,6 +6,7 @@ import (
 	"path"
 	"strconv"
 	"strings"
+	"time"
 
 	"not1/internal/config"
 	"not1/internal/index"
@@ -437,6 +438,45 @@ func (s *Server) handleSetConfig(w http.ResponseWriter, r *http.Request) {
 }
 
 // ------------------------------------------------------------- databases
+
+// handleAgenda is the calendar's one read: every event in the vault whose date
+// falls in the requested range, each one pointing back at the page and line
+// that defines it. Nothing is stored here — the range is the only input and the
+// fence in a page is the only output of an edit.
+func (s *Server) handleAgenda(w http.ResponseWriter, r *http.Request) {
+	from := strings.TrimSpace(r.URL.Query().Get("from"))
+	to := strings.TrimSpace(r.URL.Query().Get("to"))
+	now := time.Now()
+	if from == "" {
+		from = time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, time.Local).Format("2006-01-02")
+	}
+	if to == "" {
+		to = time.Date(now.Year(), now.Month()+2, 0, 0, 0, 0, 0, time.Local).Format("2006-01-02")
+	}
+	for _, d := range []string{from, to} {
+		if _, err := time.Parse("2006-01-02", d); err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "dates are YYYY-MM-DD", "code": "invalid"})
+			return
+		}
+	}
+	if to < from {
+		from, to = to, from
+	}
+
+	s.mu.RLock()
+	ix := s.idx
+	s.mu.RUnlock()
+	events := []index.Event{}
+	if ix != nil {
+		var err error
+		events, err = ix.Events(from, to)
+		if err != nil {
+			writeErr(w, err)
+			return
+		}
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"events": events, "from": from, "to": to})
+}
 
 func (s *Server) handleGetDB(w http.ResponseWriter, r *http.Request) {
 	rel := cleanRel(r.URL.Query().Get("path"))

@@ -82,6 +82,16 @@ func (ix *Index) migrate() error {
 			dst TEXT NOT NULL,
 			dst_path TEXT NOT NULL DEFAULT ''
 		)`,
+		`CREATE TABLE IF NOT EXISTS events(
+			path TEXT NOT NULL,
+			line INTEGER NOT NULL,
+			date TEXT NOT NULL,
+			start TEXT NOT NULL DEFAULT '',
+			end TEXT NOT NULL DEFAULT '',
+			title TEXT NOT NULL
+		)`,
+		`CREATE INDEX IF NOT EXISTS events_date ON events(date)`,
+		`CREATE INDEX IF NOT EXISTS events_path ON events(path)`,
 		`CREATE INDEX IF NOT EXISTS links_src ON links(src)`,
 		`CREATE INDEX IF NOT EXISTS links_dst ON links(dst)`,
 	}
@@ -104,7 +114,7 @@ func (ix *Index) ReplaceAll(pages []vault.Page) error {
 		return err
 	}
 	defer tx.Rollback()
-	for _, q := range []string{`DELETE FROM pages`, `DELETE FROM pages_fts`, `DELETE FROM links`} {
+	for _, q := range []string{`DELETE FROM pages`, `DELETE FROM pages_fts`, `DELETE FROM links`, `DELETE FROM events`} {
 		if _, err := tx.Exec(q); err != nil {
 			return err
 		}
@@ -148,6 +158,17 @@ func upsertTx(tx *sql.Tx, p vault.Page) error {
 	if _, err := tx.Exec(`INSERT INTO pages_fts(path,title,body) VALUES(?,?,?)`, p.Path, p.Title, p.Body); err != nil {
 		return err
 	}
+	if _, err := tx.Exec(`DELETE FROM events WHERE path=?`, p.Path); err != nil {
+		return err
+	}
+	// Events are derived from the page body, like links: the fence is the only
+	// copy, and this table is rebuilt from it whenever the file changes.
+	for _, ev := range vault.ParseEvents(p.Body) {
+		if _, err := tx.Exec(`INSERT INTO events(path,line,date,start,end,title) VALUES(?,?,?,?,?,?)`,
+			p.Path, ev.Line, ev.Date, ev.Start, ev.End, ev.Title); err != nil {
+			return err
+		}
+	}
 	if _, err := tx.Exec(`DELETE FROM links WHERE src=?`, p.Path); err != nil {
 		return err
 	}
@@ -181,6 +202,9 @@ func (ix *Index) Remove(rel string) error {
 		return err
 	}
 	if _, err := tx.Exec(`DELETE FROM links WHERE src=?`, rel); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(`DELETE FROM events WHERE path=?`, rel); err != nil {
 		return err
 	}
 	if _, err := tx.Exec(`UPDATE links SET dst_path='' WHERE dst_path=?`, rel); err != nil {

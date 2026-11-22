@@ -11,6 +11,8 @@ import {
 } from "./cells.js";
 import { fetchDatabase, renderDatabase } from "./db.js";
 import { initBlocks } from "./blocks.js";
+import { initEvents, askEvent, insertBlock, editTitle } from "./events.js";
+import { initCalendar, toggleCalendar, refreshCalendar } from "./calendar.js";
 import { autoResize, caretCoords } from "./editor.js";
 
 const $ = (sel, root = document) => root.querySelector(sel);
@@ -142,6 +144,11 @@ async function init() {
   bindChrome();
   bindEditor();
   bindShortcuts();
+  initCalendar({
+    // An event is a line in a file: opening one puts you on that line.
+    open: (path, line) => openPage(path, { line }),
+    add: (date) => addEventDialog(date),
+  });
   try {
     const data = await api("/api/bootstrap");
     onWorkspaceData(data);
@@ -488,7 +495,7 @@ function markActiveRow() {
 
 /* -------------------------------------------------------------- open page */
 
-async function openPage(path, { force = false } = {}) {
+async function openPage(path, { force = false, line = null } = {}) {
   if (!path) return;
   if (state.dirty && !force) {
     await savePage();
@@ -508,6 +515,7 @@ async function openPage(path, { force = false } = {}) {
     markActiveRow();
     history.replaceState(null, "", "#" + encodeURI(data.page.path));
     el.scroller.scrollTop = 0;
+    if (line != null) revealLine(line);
     updateSaveState("");
   } catch (err) {
     if (err instanceof ApiError && err.code === "not_found") {
@@ -820,6 +828,7 @@ async function savePage({ force = false } = {}) {
         ...state.recentPages.filter((r) => r.path !== res.page.path && r.path !== prevPath),
       ].slice(0, 10);
       renderSideRecent();
+      refreshCalendar();
     }
   } catch (err) {
     if (err instanceof ApiError && err.code === "conflict") {
@@ -858,6 +867,7 @@ function bindChrome() {
   $("#collapse-btn").innerHTML = icon("panel");
   $("#show-sidebar").innerHTML = icon("panel");
   $("#page-menu").innerHTML = icon("more");
+  $("#calendar-btn").innerHTML = icon("calendar");
   $("#reveal-btn").innerHTML = icon("folder-open");
   $("#theme-btn").innerHTML = icon("moon");
   $("#collapse-btn").onclick = () => setSidebar(false);
@@ -866,6 +876,7 @@ function bindChrome() {
   $("#reveal-btn").onclick = () =>
     api("/api/reveal", { method: "POST", body: { path: "" } }).catch((e) => toast(e.message, "error"));
   $("#search-btn").onclick = () => openPalette();
+  $("#calendar-btn").onclick = () => toggleCalendar();
   $("#new-page-btn").onclick = () => createPage();
   $("#new-folder-btn").onclick = () => createFolder();
   $("#page-menu").dataset.opensMenu = "1";
@@ -1081,6 +1092,12 @@ function bindEditor() {
       el.editor.setSelectionRange(pos, pos);
       if (!updateLinkerFromInput()) updateSlashFromInput();
     },
+  });
+  initEvents({
+    host: el.preview,
+    source: () => state.page?.body ?? "",
+    commit: commitBody,
+    menu: (x, y, items) => openMenu(x, y, items),
   });
   initCells({
     source: () => state.page?.body ?? "",
@@ -1317,6 +1334,27 @@ const SLASH_ITEMS = [
     sel: [2, 8],
     match: ["table", "grid"],
   },
+  {
+    key: "events",
+    label: "Events",
+    desc: "One event, on the calendar",
+    icon: "🗓",
+    // A block construct, so it arrives with air around it, dated today, with the
+    // description selected: type, and the event has a name.
+    block: true,
+    gen: () => eventsTemplate(),
+    // The fence is text the moment it is inserted, but an event is a block with
+    // three fields — so write it and put the caret in the description.
+    after: () => {
+      blocks?.commitNow();
+      setTimeout(() => {
+        const rows = [...el.preview.querySelectorAll(".md-events.single .ev")];
+        const last = rows[rows.length - 1];
+        if (last) editTitle(Number(last.dataset.evLine), { select: true });
+      }, 90);
+    },
+    match: ["events", "event", "calendar", "agenda", "schedule", "date"],
+  },
   { key: "link", label: "Link to page", desc: "[[", icon: "⧉", template: "[[", match: ["link", "page", "wikilink", "[["] },
   {
     key: "image",
@@ -1437,6 +1475,18 @@ function closeSlash() {
   }
 }
 
+const pad2 = (n) => String(n).padStart(2, "0");
+
+const PLACEHOLDER = "New event";
+
+/** One event, today, with its description selected. */
+function eventsTemplate() {
+  const d = new Date();
+  const date = `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+  const line = date + " " + PLACEHOLDER;
+  return { text: "```events\n" + line + "\n```", select: PLACEHOLDER };
+}
+
 function applySlash(item) {
   if (!item) return;
   const ta = el.editor;
@@ -1448,7 +1498,8 @@ function applySlash(item) {
     return;
   }
   ta.focus();
-  let template = item.template;
+  const gen = item.gen ? item.gen() : null;
+  let template = gen ? gen.text : item.template;
   if (item.block) {
     // A blank line above, unless the line is already blank: block constructs
     // like tables cannot interrupt a paragraph in ordinary markdown.
@@ -1458,8 +1509,17 @@ function applySlash(item) {
     if (prefix.trim() || above.trim()) template = "\n" + template;
   }
   ta.setRangeText(template, slash.start, end, "end");
-  const shift = template.length - item.template.length;
-  if (item.sel) {
+  const shift = template.length - (gen ? gen.text : item.template).length;
+  if (gen?.select) {
+    // Select by text, not by offset: a fence's own markers are hidden while it
+    // is being edited, so offsets into the template do not survive.
+    const i = ta.value.lastIndexOf(gen.select);
+    if (i >= 0) ta.setSelectionRange(i, i + gen.select.length);
+    else ta.setSelectionRange(ta.value.length, ta.value.length);
+  } else if (gen) {
+    const pos = slash.start + shift + gen.caret;
+    ta.setSelectionRange(pos, pos);
+  } else if (item.sel) {
     // Select the placeholder so typing replaces it, like a fresh Notion table.
     ta.setSelectionRange(slash.start + shift + item.sel[0], slash.start + shift + item.sel[1]);
   } else if (item.caret != null) {
@@ -1468,6 +1528,7 @@ function applySlash(item) {
   }
   ta.dispatchEvent(new Event("input", { bubbles: true }));
   closeSlash();
+  item.after?.();
 }
 
 /* ------------------------------------------------------------- media blocks */
@@ -2365,6 +2426,7 @@ function paletteCommands() {
     { group: "Actions", title: "New page", icon: "＋", hint: "⌘N", run: () => createPage() },
     { group: "Actions", title: "New database", icon: "▦", run: () => createDatabase() },
     { group: "Actions", title: "New folder", icon: "🗂", run: () => createFolder() },
+    { group: "Actions", title: "Calendar", icon: "🗓", hint: "Events across the vault", run: () => toggleCalendar(true) },
     { group: "Actions", title: "Open another folder…", icon: "📂", run: pickFolder },
     {
       group: "Actions",
@@ -2579,6 +2641,7 @@ let treeRefreshTimer = 0;
 let dbRefreshTimer = 0;
 function onExternalChange(paths) {
   if (!state.workspace) return;
+  refreshCalendar();
   clearTimeout(treeRefreshTimer);
   treeRefreshTimer = setTimeout(() => refreshTree(), 120);
   if (state.db && state.page?.type === "database") {
@@ -2604,6 +2667,70 @@ function onExternalChange(paths) {
     return;
   }
   if (state.page && paths.includes(state.page.path)) return;
+}
+
+/* --------------------------------------------------------------- calendar */
+
+/** Bring a source line into view and let it glow for a moment. */
+function revealLine(line) {
+  const node =
+    [...el.preview.children].find(
+      (n) => n.dataset.end != null && Number(n.dataset.line) <= line && line < Number(n.dataset.end)
+    ) || el.preview;
+  node.scrollIntoView({ block: "center" });
+  node.classList.remove("flash");
+  void node.offsetWidth; // restart the animation
+  node.classList.add("flash");
+  setTimeout(() => node.classList.remove("flash"), 1500);
+}
+
+/**
+ * Write an event by writing a block. The panel asks; the page is the answer:
+ * one event, one ```events fence, added where the page ends.
+ */
+async function addEventOn(date, start = "", end = "") {
+  if (state.needsWorkspace) return;
+  if (!state.page) {
+    // Nowhere to write yet: an events page is the natural home, and one is
+    // only made when the vault has none.
+    try {
+      const hit = await api("/api/resolve?target=" + encodeURIComponent("Calendar")).catch(() => null);
+      if (hit?.found && hit.path) {
+        await openPage(hit.path, { force: true });
+      } else {
+        const res = await api("/api/page", { method: "POST", body: { dir: "", title: "Calendar", kind: "page" } });
+        await refreshTree();
+        await openPage(res.page.path, { force: true });
+      }
+    } catch (err) {
+      toast(err.message, "error");
+      return;
+    }
+  }
+  if (!state.page || state.page.type === "database") {
+    toast("Open a page to hold the event", "error");
+    return;
+  }
+  if (state.dirty) await savePage();
+
+  const lines = (state.page.body || "").replace(/\r/g, "").split("\n");
+  if (lines.length === 1 && !lines[0].trim()) lines.length = 0;
+  const line = [date, [start, end].filter(Boolean).join("-"), PLACEHOLDER].filter(Boolean).join(" ");
+  const at = insertBlock(lines, line);
+
+  commitBody(lines.join("\n") + "\n", { rerender: true });
+  await savePage();
+  // The description is selected, so typing names the event.
+  setTimeout(() => editTitle(at, { select: true }), 60);
+}
+
+/** The calendar's plus: a date and an optional time before it writes anything. */
+async function addEventDialog(date) {
+  const r = document.querySelector("#calendar-add")?.getBoundingClientRect();
+  const pick = await askEvent({ date, head: "New event", x: (r?.right ?? window.innerWidth) - 258, y: r?.bottom ?? 90 });
+
+  if (!pick) return;
+  await addEventOn(pick.date, pick.start, pick.end);
 }
 
 /* ----------------------------------------------------------------- boot */

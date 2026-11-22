@@ -2573,3 +2573,515 @@ body.is-db .page-meta {
   background: var(--hover-strong, rgba(0, 0, 0, 0.07));
   color: var(--text);
 }
+
+/* ------------------------------------------------------------------ events */
+
+/* An ```events fence in a page: one event, read where it is written. A fence
+   with several lines is what an older page looks like, and it still reads as a
+   list with a bar on top. Notion-quiet: hairline, faint label, a count. */
+.md-events {
+  margin: 1em 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--code-bg);
+  overflow: hidden;
+}
+.md-events-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 10px;
+  border-bottom: 1px solid var(--border);
+  font-size: 11.5px;
+  color: var(--text-faint);
+}
+.md-events-label {
+  font-weight: 500;
+  letter-spacing: 0.01em;
+}
+.md-events-count {
+  margin-left: auto;
+  font-variant-numeric: tabular-nums;
+  opacity: 0.8;
+}
+.md-events-body {
+  padding: 2px 0;
+}
+.md-events-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+/* The page's own list rules are more specific than a class, and they would put
+   a bullet inset and a gap between the rows of an event card. Undo them. */
+.md .md-events-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.md .md-events-list > .ev,
+.md .md-events-list > .ev-bad {
+  margin: 0;
+}
+.md-events-list .ev {
+  display: grid;
+  grid-template-columns: 84px 88px minmax(0, 1fr) 18px;
+  align-items: start;
+  gap: 10px;
+  padding: 5px 12px 5px 12px;
+  font-size: 13.5px;
+  line-height: 1.5;
+}
+/* Title and description stack in one column, so the description is under the
+   title, not under the time. */
+.md-events-list .ev-text {
+  min-width: 0;
+}
+.md-events-list .ev:hover {
+  background: var(--hover);
+}
+/* The count and the options sit together at the right of the bar. */
+.md-events-more,
+.md-events-list .ev-more {
+  border: 0;
+  padding: 0;
+  width: 18px;
+  height: 16px;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-faint);
+  font-size: 13px;
+  line-height: 12px;
+  opacity: 0;
+  cursor: pointer;
+}
+.md-events-list .ev-more {
+  justify-self: end;
+  align-self: center;
+}
+/* The block's own options sit at the right of the bar, always visible — the bar
+   is a label, and a label does not hide its menu. Row options wait for the
+   pointer, like every other row affordance. */
+.md-events-more {
+  margin-left: auto;
+  opacity: 0.55;
+}
+.md-events-list .ev:hover .ev-more,
+.md-events-list .ev:focus-within .ev-more,
+.md-events-more:hover,
+.md-events-more:focus-visible,
+.ev-more:focus-visible {
+  opacity: 1;
+}
+.md-events-more:hover,
+.md-events-list .ev-more:hover {
+  background: var(--border);
+  color: var(--text);
+}
+/* The time is a button that looks like text: clicking it sets one. */
+.md-events-list .ev-time {
+  border: 0;
+  padding: 0;
+  background: transparent;
+  text-align: left;
+  font: inherit;
+  cursor: pointer;
+}
+.md-events-list .ev-time:hover {
+  color: var(--accent);
+  text-decoration: underline dotted;
+}
+/* Lines in a block that are not an event and have no event above them: shown
+   as written, faintly, so the block never hides what the file says. */
+.md-events-empty.ev-bad-lines {
+  font-family: var(--mono);
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--text-faint);
+  white-space: pre-wrap;
+}
+/* The day is a button too: the block's three fields are all editable, so the
+   description is not the only thing you can change here. */
+.md-events-list .ev-day {
+  border: 0;
+  padding: 0;
+  background: transparent;
+  text-align: left;
+  color: var(--text-soft);
+  font: inherit;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+}
+.md-events-list .ev-day:hover {
+  color: var(--accent);
+  text-decoration: underline dotted;
+}
+.md-events-list .ev-title {
+  cursor: text;
+}
+.md-events-list .ev-time {
+  color: var(--text-soft);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.md-events-list .ev-time.all {
+  color: var(--text-faint);
+  font-style: italic;
+}
+.md-events-list .ev-title {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* The description is prose the user wrote in the block: it keeps its line
+   breaks and its own quiet colour, because it is not part of the event's
+   headline. */
+.md-events-list .ev-desc {
+  margin-top: 1px;
+  max-width: 62ch;
+  color: var(--text-soft);
+  font-size: 12.8px;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  cursor: text;
+}
+.md-events-list .ev-desc:hover {
+  color: var(--text);
+}
+.md-events-list .ev-desc.empty {
+  color: var(--text-faint);
+  cursor: text;
+}
+.md-events-list .ev-desc.empty:hover {
+  color: var(--text-soft);
+}
+.md-events-list .ev.today .ev-day {
+  color: var(--accent);
+}
+.md-events-empty {
+  padding: 8px 12px;
+  font-size: 13px;
+  color: var(--text-faint);
+}
+
+/* One event, one block: it reads as an object, not as a table of them, so it
+   takes only the width it needs. */
+.md-events.single {
+  display: inline-block;
+  min-width: 460px;
+  max-width: 100%;
+  border-radius: 8px;
+  background: var(--hover);
+}
+.md-events.single .md-events-body {
+  padding: 0;
+}
+.md-events.single .md-events-list .ev {
+  grid-template-columns: auto auto minmax(60px, 1fr) 18px;
+  gap: 9px;
+  padding: 5px 8px 6px 11px;
+  border-radius: 7px;
+  font-size: 13.5px;
+}
+.md-events.single .md-events-list .ev:hover {
+  background: var(--active);
+}
+.md-events.single .ev-title {
+  max-width: 52ch;
+}
+.md-events.single .ev.today .ev-day {
+  color: var(--accent);
+}
+/* Typing over a field: the same text, in place, on a clean plate. */
+.ev-title-edit,
+.ev-desc-edit {
+  position: fixed;
+  z-index: 220;
+  border: 0;
+  outline: 0;
+  padding: 0 2px;
+  border-radius: 4px;
+  background: var(--bg);
+  box-shadow: 0 0 0 1.5px var(--accent), 0 8px 22px rgba(0, 0, 0, 0.12);
+  color: var(--text);
+  line-height: inherit;
+}
+/* The description is prose: it wraps, it grows, and Escape/click-away commit
+   it the way the block editor does. */
+.ev-desc-edit {
+  padding: 3px 4px;
+  min-height: 34px;
+  resize: none;
+  overflow: hidden;
+  font-family: inherit;
+  white-space: pre-wrap;
+}
+[data-theme="dark"] .md-events {
+  background: var(--code-bg);
+}
+[data-theme="dark"] .md-events.single {
+  background: var(--hover);
+}
+
+/* The calendar panel: a third column, so the page keeps its width and the
+   month sits beside it, like a side peek. */
+.cal {
+  width: 330px;
+  flex: 0 0 330px;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  background: var(--bg-sidebar);
+  border-left: 1px solid var(--border);
+}
+.cal-head {
+  height: 45px;
+  flex: 0 0 45px;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 0 8px;
+  border-bottom: 1px solid var(--border);
+}
+.cal-head .icon-btn svg {
+  width: 15px;
+  height: 15px;
+}
+.cal-month {
+  font-size: 13px;
+  font-weight: 500;
+  padding: 0 4px;
+  white-space: nowrap;
+}
+.cal-today {
+  font-size: 12px;
+  color: var(--text-soft);
+  padding: 4px 8px;
+  border-radius: 5px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+}
+.cal-today:hover {
+  background: var(--hover);
+  color: var(--text);
+}
+.cal-week {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 2px;
+  padding: 12px 14px 4px;
+  font-size: 10.5px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+  text-align: center;
+}
+.cal-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 2px;
+  padding: 2px 14px 10px;
+}
+.cal-cell {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  height: 36px;
+  border-radius: 6px;
+  font-size: 12.5px;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+.cal-cell:hover {
+  background: var(--hover);
+}
+.cal-cell.other {
+  color: var(--text-faint);
+}
+.cal-cell.today .cal-num {
+  color: var(--accent);
+  font-weight: 600;
+}
+.cal-cell.sel {
+  background: var(--accent);
+  color: #fff;
+}
+.cal-cell.sel:hover {
+  background: var(--accent);
+}
+.cal-cell.sel .cal-num {
+  color: #fff;
+}
+.cal-dots {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  height: 5px;
+}
+.cal-dots i {
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: var(--accent);
+}
+.cal-dots i[data-kind="all"] {
+  background: var(--text-faint);
+}
+.cal-cell.sel .cal-dots i {
+  background: rgba(255, 255, 255, 0.85);
+}
+.cal-dots u {
+  font-size: 8px;
+  line-height: 1;
+  text-decoration: none;
+  color: var(--text-faint);
+}
+.cal-cell.sel .cal-dots u {
+  color: rgba(255, 255, 255, 0.85);
+}
+.cal-day {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  border-top: 1px solid var(--border);
+}
+.cal-day-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px 6px 14px;
+  font-size: 12px;
+  color: var(--text-soft);
+}
+.cal-day-head .cal-add {
+  margin-left: auto;
+  display: inline-flex;
+  padding: 3px;
+  border-radius: 4px;
+  color: var(--text-faint);
+}
+.cal-day-head .cal-add:hover {
+  background: var(--hover);
+  color: var(--text);
+}
+.cal-day-head .cal-add svg {
+  width: 14px;
+  height: 14px;
+}
+.cal-list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 0 8px 16px;
+}
+.cal-ev {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  width: 100%;
+  text-align: left;
+  padding: 7px 8px;
+  border-radius: 6px;
+}
+.cal-ev:hover {
+  background: var(--hover);
+}
+.cal-ev-time {
+  flex: 0 0 78px;
+  font-size: 12px;
+  white-space: nowrap;
+  color: var(--text-soft);
+  font-variant-numeric: tabular-nums;
+  padding-top: 1px;
+}
+.cal-ev-time.all {
+  color: var(--text-faint);
+  font-style: italic;
+}
+.cal-ev-body {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.cal-ev-title {
+  font-size: 13px;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.cal-ev-page {
+  font-size: 11.5px;
+  color: var(--text-faint);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.cal-ev-icon {
+  margin-right: 4px;
+  opacity: 0.8;
+}
+.cal-empty {
+  padding: 8px;
+  font-size: 12.5px;
+  color: var(--text-faint);
+}
+
+/* Where an event lives: the line that defines it gets a moment of light. */
+.flash {
+  background: var(--accent-soft);
+  border-radius: 4px;
+  transition: background 0.6s ease;
+}
+
+/* The toolbar button reads as pressed while the calendar is up. */
+#calendar-btn.on {
+  background: var(--active);
+  color: var(--text);
+}
+
+/* The event dialog: a date and an optional time, nothing else. */
+.ev-pop {
+  width: 262px;
+  gap: 7px;
+}
+.ev-pop .url-head {
+  text-transform: none;
+  letter-spacing: 0;
+  font-size: 12.5px;
+  color: var(--text-soft);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ev-pop .ev-hint {
+  width: 100%;
+  padding: 0 2px;
+  font-size: 11.5px;
+  color: var(--text-faint);
+}
+.ev-pop .ev-times {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 1 1 100%;
+}
+.ev-pop .ev-times .url-input {
+  flex: 1 1 0;
+  min-width: 0;
+  padding: 5px 7px;
+}
+.ev-pop .ev-dash {
+  color: var(--text-faint);
+}
+.ev-pop .url-add {
+  margin-left: auto;
+}

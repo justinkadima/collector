@@ -32,7 +32,7 @@ function strip(kind, raw) {
   if (kind === "quote" || kind === "callout") {
     return { text: lines.map((l) => l.replace(/^\s{0,3}>\s?/, "")).join("\n"), meta: {} };
   }
-  if (kind === "code") {
+  if (kind === "code" || kind === "events") {
     const open = lines[0].match(/^\s*(`{3,}|~{3,})\s*([\w+#-]*)/);
     const fence = open ? open[1] : "```";
     const lang = open ? open[2] || "" : "";
@@ -59,7 +59,7 @@ function add(kind, meta, text) {
   if (kind === "quote" || kind === "callout") {
     return lines.map((l) => "> " + l).join("\n");
   }
-  if (kind === "code") {
+  if (kind === "code" || kind === "events") {
     const fence = meta.fence || "```";
     return fence + (meta.lang || "") + "\n" + lines.join("\n") + "\n" + fence;
   }
@@ -69,7 +69,7 @@ function add(kind, meta, text) {
 /** How much of a source line is marker, so caret offsets line up. */
 function prefixLen(kind, meta, lineIdx) {
   if (kind === "quote" || kind === "callout") return 2; // every line is "> "
-  if (kind === "code") return 0;
+  if (kind === "code" || kind === "events") return 0;
   if (lineIdx > 0) return 0;
   if (/^h[1-6]$/.test(kind)) return (meta.marker || "").length;
   if (kind === "li") return (meta.indent || "").length + (meta.marker || "").length + (meta.box || "").length;
@@ -162,10 +162,26 @@ export function initBlocks(opts) {
     ta.rows = 1;
     ta.value = text;
 
-    const box = kind === "code" ? unit.querySelector("pre") || unit : unit;
-    const textFrom =
-      unit.matches("li") ? unit : kind === "code" ? unit.querySelector("code") || unit : unit.querySelector(":scope > p") || unit;
+    // An events block edits its raw lines over its own body, so the card stays
+    // where it is while the fence is being typed.
+    const inner = kind === "events" ? unit.querySelector(".md-events-body") : null;
+    const box = kind === "code" ? unit.querySelector("pre") || unit : inner || unit;
+    const textFrom = unit.matches("li")
+      ? unit
+      : kind === "code"
+        ? unit.querySelector("code") || unit
+        : inner || unit.querySelector(":scope > p") || unit;
     styleOf(textFrom).forEach(([k, v]) => ta.style.setProperty(k, v));
+    if (kind === "events") {
+      // Raw event lines line up in columns, so the fence is edited as data.
+      ta.style.setProperty("font-family", css(document.documentElement, "--mono"));
+      ta.style.setProperty("font-size", "12.8px");
+      ta.style.setProperty("line-height", "1.62");
+      ta.style.setProperty("padding-top", "6px");
+      ta.style.setProperty("padding-bottom", "6px");
+      ta.style.setProperty("padding-left", "12px");
+      ta.style.setProperty("padding-right", "12px");
+    }
     place(ta, box);
 
     unit.classList.add("block-hidden");
@@ -414,7 +430,7 @@ export function initBlocks(opts) {
     const before = text.slice(0, caretPos);
     const after = text.slice(caretPos);
 
-    if (kind === "code") {
+    if (kind === "code" || kind === "events") {
       ta.setRangeText("\n", caretPos, caretPos, "end");
       onInput();
       return;
@@ -575,7 +591,7 @@ export function initBlocks(opts) {
     }
 
     const kind = unit.dataset.kind;
-    if (kind && !RAW.has(kind) && !/^h[1-6]$/.test(kind) && !["li", "quote", "callout", "code"].includes(kind)) {
+    if (kind && !RAW.has(kind) && !/^h[1-6]$/.test(kind) && !["li", "quote", "callout", "code", "events"].includes(kind)) {
       return false; // tables, media, dividers: not text
     }
     const { meta } = strip(kind === "list" ? "p" : kind, raw.slice(Number(unit.dataset.line), Number(unit.dataset.end)).join("\n"));
