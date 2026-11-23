@@ -12,6 +12,12 @@ const LIST_LINE = /^\s*(?:[-*+]|\d+[.)])\s+/;
 /** Kinds whose text is the raw markdown (no marker to hide). */
 const RAW = new Set(["p", "bookmark", "list"]);
 
+/** Blocks that are one object rather than lines of prose. Backspace at the start
+ *  of the block under one must not merge into it: a paragraph appended to a
+ *  table's last row is written into the table, and one appended to a closing
+ *  fence breaks the fence. */
+const ATOM = new Set(["table", "hr", "media", "code", "events"]);
+
 /* ------------------------------------------------------------ kind mapping */
 
 /** Split a block's source into the text to show and what to put back. */
@@ -524,6 +530,29 @@ export function initBlocks(opts) {
       }
       return;
     }
+    // The block above is an object, not prose: there is nothing here that can
+    // join it, and writing into it would damage it. Mark it instead — the next
+    // Backspace deletes it, so the table you meant to remove goes away without
+    // a word being written into it. An empty block in front of it is tidied
+    // away as part of the same gesture.
+    const above = atomAbove(lines, start);
+    if (above) {
+      const r = range(above);
+      const ed = edit;
+      close(ed);
+      if (emptyText) {
+        let prev = start - 1;
+        while (prev > 0 && !lines[prev].trim()) prev--;
+        const rest = lines.slice(end);
+        const kept = lines.slice(0, prev + 1);
+        if (rest.length && rest[0].trim()) kept.push("");
+        commit(keepNewline(kept.concat(rest)), true);
+      }
+      render();
+      selAnchor = r;
+      selectBlocks(r, r);
+      return;
+    }
     // Find the previous non-empty line and append to it.
     let prev = start - 1;
     while (prev > 0 && !lines[prev].trim()) prev--;
@@ -542,6 +571,15 @@ export function initBlocks(opts) {
     commit(out, true);
     render();
     openAtLine(prev, col);
+  }
+
+  /** The block that is one object — a table, a divider, media, a fence — whose
+   *  last line is the last non-empty line above `start`. */
+  function atomAbove(lines, start) {
+    let prev = start - 1;
+    while (prev > 0 && !lines[prev].trim()) prev--;
+    const el = tops().find((n) => Number(n.dataset.end) === prev + 1 && Number(n.dataset.line) <= prev);
+    return el && ATOM.has(el.dataset.kind) ? el : null;
   }
 
   /** Arrow keys at the edges walk to the neighbouring block, skipping blank
@@ -748,7 +786,32 @@ export function initBlocks(opts) {
     openAtLine(from + block.length - 1, block[block.length - 1].length);
   }
 
-  const deleteSelection = () => spliceSelection("");
+  /** The text this body would have if `lines` were the body: a page ends with
+   *  a newline, and a deletion at the end must not take it away. */
+  function keepNewline(lines) {
+    const text = lines.join("\n");
+    return (body() || "").endsWith("\n") && !text.endsWith("\n") ? text + "\n" : text;
+  }
+
+  /** Delete the selected blocks, leaving one empty line where they were. */
+  function deleteBlocks() {
+    if (!sel) return;
+    const { from, to } = sel;
+    const lines = (body() || "").split("\n");
+    const out = [...lines.slice(0, from), ...lines.slice(to)];
+    // The blocks were separated from their neighbours by empty lines; the gap
+    // they leave should be one empty line, not the pile that surrounded them.
+    if (from > 0 && from < out.length && !out[from - 1].trim() && !out[from].trim()) out.splice(from, 1);
+    sel = null;
+    commit(keepNewline(out), true);
+    render();
+    // Put the caret in the gap: the empty line above the blocks, failing that
+    // the line they left behind, and failing that the block that followed.
+    let at = from;
+    if (at > 0 && !out[at - 1].trim()) at--;
+    if (at >= out.length) at = Math.max(0, out.length - 1);
+    openAtLine(at, 0);
+  }
 
   /** Move the far edge of the block selection, the way shift+arrow moves the
    *  far end of a text selection. The anchor stays where the range started. */
@@ -811,7 +874,7 @@ export function initBlocks(opts) {
     }
     if (e.key === "Backspace" || e.key === "Delete") {
       e.preventDefault();
-      deleteSelection();
+      deleteBlocks();
       return;
     }
     if (e.key === "Enter") {
@@ -829,19 +892,28 @@ export function initBlocks(opts) {
   /* ---- pointer ---- */
 
   let press = null; // a pointer press that may turn into a drag selection
+  // The click that ends a selection gesture belongs to the selection. Without
+  // this, a shift-click selects a block and the click that follows clears it
+  // (or opens the block instead) — the gesture undoes itself.
+  let swallowClick = false;
 
   host.addEventListener(
     "mousedown",
     (e) => {
       if (e.button !== 0) return;
+      swallowClick = false;
       if (edit && edit.ta.contains(e.target)) return; // typing surface: native
 
       // Shift-click picks whole blocks — Notion's way of marking several lines
       // at once, and the only way to act on a run of blocks.
       if (e.shiftKey) {
+        // Inside a cell being edited, shift-click is the cell's own text
+        // selection: the browser is better at it than we are.
+        if (e.target.closest?.(".cell-editing")) return;
         const target = unitOf(e.target);
         if (target) {
           e.preventDefault();
+          swallowClick = true;
           const anchor = selAnchor || (edit ? range(edit.unit) : lastRange) || range(target);
           if (edit) {
             const ed = edit;
@@ -880,6 +952,7 @@ export function initBlocks(opts) {
     const r = range(over);
     if (!press.moved && r.from === press.from.from && r.to === press.from.to) return;
     press.moved = true;
+    swallowClick = true;
     selAnchor = press.from;
     selectBlocks(press.from, r);
   });
@@ -1200,6 +1273,8 @@ export function initBlocks(opts) {
 
   host.addEventListener("click", (e) => {
     if (!editable?.()) return;
+    // A gesture that selected blocks has already done what the user asked.
+    if (swallowClick) return;
     if (e.target.closest(".md-code-bar, .bookmark, [data-wiki], [data-md], [data-external], [data-file], input, a, button")) return;
     const dropped = press;
     press = null;
@@ -1248,6 +1323,9 @@ export function initBlocks(opts) {
     reset() {
       if (edit) close(edit);
       clearSelection();
+      // The page has been re-rendered: a line range kept from the last time it
+      // was clicked now points at whatever moved into it.
+      lastRange = null;
     },
     selection: () => (sel ? { ...sel } : null),
     isEditing: () => !!edit,

@@ -6,6 +6,29 @@ tags; the app prints the same number with `collector -version`.
 Nothing here has ever rewritten a page it wasn't asked to. When a release
 changes the markdown grammar it says so, and the old shape keeps working.
 
+## 0.7.4 — 2026-11-23
+
+**Files:** nothing moves.
+
+- A block can be deleted, a table included. Shift-clicking a block selected it
+  and the click that follows immediately cleared the selection, so the blocks a
+  gesture had just marked could not be acted on — and a table could not be
+  marked at all, because a click inside it starts editing a cell. A click that
+  ends a selection now belongs to the selection.
+- Backspace at the start of the block under a table no longer writes into the
+  table: it merged the paragraph into the table's last row. Text never merges
+  into a block that is an object — a table, a divider, media, a code fence —
+  because there is no line there for prose to join. Backspace next to one marks
+  it instead, and the next Backspace deletes it.
+- Deleting blocks leaves one empty line where they were, not the pile of empty
+  lines that surrounded them.
+- A table can be deleted from its own menus. Columns have a handle again: a `⋮`
+  above the header of the column you are hovering, which opens that column's
+  menu, next to the `⋯` at the row's left that opens the row's. Both menus end
+  with **Delete table** — the table you want gone is the table you were just
+  clicking in, and neither menu had a way to say so. What is left behind is one
+  empty line and the caret, so the page is ready to be written in.
+
 ## 0.7.3 — 2026-11-22
 
 **Files:** nothing moves. A blank line still means what it has always meant:

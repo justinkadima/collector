@@ -116,6 +116,9 @@ the tile.
   wash a run of blocks, then `Delete`/`Backspace` removes exactly those lines
   from the file, or just start typing to replace the run. `Esc` drops the
   selection. Inside one block, ordinary text selection still applies.
+  `Backspace` at the start of a block whose neighbour above is an object — a
+  table, a divider, media, a code fence — marks that object instead of writing
+  into it, and the next `Backspace` deletes it.
 - **Blocks can be dragged into a different order.** Hover a block and a six-dot
   handle appears in the gutter; drag it up or down and a line shows where the
   block will land. The block moves as its source lines — a heading stays a
@@ -153,13 +156,15 @@ the tile.
   Clicking empty paper always writes where you clicked: between two blocks it
   opens (or makes) the line at that height, under the last block it grows the
   page.
-- Tables have their own menus for rows and columns. Hover any row — the
-  header row included — for an ellipsis at its left, or right-click a cell:
-  insert row above/below, duplicate row, clear contents, delete row. The header
-  row's handle opens the column menu, because a header cell *is* the column's
-  label: insert column left/right, clear contents, delete column. Both are
-  filtered by a "Search actions…" box, and both rewrite the markdown rows in
-  place — a table is just text.
+- Tables have their own menus for rows and columns, and one of them is how you
+  delete a table. Hover a row for an ellipsis at its left, or right-click a
+  cell: insert row above/below, duplicate row, clear contents, delete row. Hover
+  a column header for an ellipsis above it, or right-click the header cell:
+  insert column left/right, clear contents, delete column. Both end with
+  **Delete table** — the row's menu and the column's menu can each remove the
+  whole table, so getting rid of one never depends on remembering a gesture.
+  Both are filtered by a "Search actions…" box, and both rewrite the markdown
+  rows in place — a table is just text.
 - **Attachments, one syntax.** `/image`, `/video`, `/audio` and `/file` open the
   native file picker, copy the file into `<vault>/attachments/`, and drop a
   page-relative markdown link at the caret: `![screenshot](../attachments/screenshot.png)`.

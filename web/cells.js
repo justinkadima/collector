@@ -292,6 +292,28 @@ function clearColumn(line, col) {
   });
 }
 
+/**
+ * Remove the table itself. Its row and column menus are the table's own menus,
+ * and a table you cannot delete from either of them is a table you have to know
+ * a keyboard gesture to get rid of.
+ */
+function deleteTable(line) {
+  const src = api.source();
+  const blk = tableBlock(src, line);
+  if (!blk) return;
+  const lines = src.split("\n");
+  const from = blk.start;
+  let to = blk.end + 1;
+  // One of the two empty lines around the table goes with it, so what is left
+  // is a gap between blocks rather than a hole in the page.
+  if (lines[from - 1] !== undefined && !lines[from - 1].trim() && lines[to] !== undefined && !lines[to].trim()) to++;
+  let next = lines.slice(0, from).concat(lines.slice(to)).join("\n");
+  if (src.endsWith("\n") && !next.endsWith("\n") && next.trim()) next += "\n";
+  api.commit(next);
+  api.refresh?.();
+  api.caretAt?.(from);
+}
+
 /** Right-click on a body cell, or the row handle, opens the row menu. */
 export function openRowMenu(cell, point) {
   if (!api || !api.menu || !cell) return;
@@ -329,6 +351,8 @@ export function openRowMenu(cell, point) {
       icon: "trash",
       action: () => editTable(line, (rows) => (rows.splice(line, 1), rows)),
     },
+    "-",
+    { label: "Delete table", icon: "trash", action: () => deleteTable(line) },
   ];
   api.menu(point.x, point.y, items);
 }
@@ -350,6 +374,7 @@ export function openColMenu(cell, point) {
   if (blk.cols > 1) {
     items.push("-", { label: "Delete column", icon: "trash", action: () => removeColumn(line, col) });
   }
+  items.push("-", { label: "Delete table", icon: "trash", action: () => deleteTable(line) });
   api.menu(point.x, point.y, items);
 }
 
@@ -361,12 +386,17 @@ export function openCellMenu(cell, point) {
 
 /* ------------------------------------------------------- row/column grips */
 
-// An ellipsis, not a grip: it opens a menu. The six-dot grid in the gutter is
+// An ellipsis, not a grip: these open a menu. The six-dot grid in the gutter is
 // the block handle, and it drags.
 const ROW_DOTS =
   '<circle cx="6" cy="12" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="18" cy="12" r="1.7"/>';
 
-const grips = { row: { el: null, cell: null } };
+// The column handle is turned on its side, so which way it points says which
+// way the menu goes: across the row, or down the column.
+const COL_DOTS =
+  '<circle cx="12" cy="6" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="12" cy="18" r="1.7"/>';
+
+const grips = { row: { el: null, cell: null }, col: { el: null, cell: null } };
 let hideTimer = 0;
 
 function ensureGrip(kind) {
@@ -376,8 +406,8 @@ function ensureGrip(kind) {
   el.type = "button";
   el.className = "md-grip md-grip-" + kind;
   el.dataset.opensMenu = "1";
-  el.setAttribute("aria-label", "Row actions");
-  el.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true">' + ROW_DOTS + "</svg>";
+  el.setAttribute("aria-label", kind === "row" ? "Row actions" : "Column actions");
+  el.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true">' + (kind === "row" ? ROW_DOTS : COL_DOTS) + "</svg>";
   el.addEventListener("mousedown", (e) => e.preventDefault());
   el.addEventListener("mouseenter", () => clearTimeout(hideTimer));
   el.addEventListener("mouseleave", scheduleGripHide);
@@ -387,9 +417,9 @@ function ensureGrip(kind) {
     const cell = g.cell;
     if (!cell) return;
     const rect = el.getBoundingClientRect();
-    // The header row is a column: its handle opens the column menu, which is
-    // what `openRowMenu` already does for a `th`.
-    openRowMenu(cell, { x: rect.left, y: rect.bottom + 4 });
+    const point = { x: rect.left, y: rect.bottom + 4 };
+    if (kind === "row") openRowMenu(cell, point);
+    else openColMenu(cell, point);
   });
   document.body.appendChild(el);
   g.el = el;
@@ -407,16 +437,28 @@ function placeGrip(kind, cell) {
   const el = ensureGrip(kind);
   clearTimeout(hideTimer);
   grips[kind].cell = cell;
-  const row = cell.parentElement?.getBoundingClientRect();
-  if (!row) return hideGrip(kind);
-  el.style.top = Math.round(row.top + row.height / 2 - 11) + "px";
-  el.style.left = Math.round(Math.max(6, row.left - 26)) + "px";
+  const rect = cell.getBoundingClientRect();
+  if (kind === "row") {
+    const row = cell.parentElement?.getBoundingClientRect();
+    if (!row) return hideGrip(kind);
+    el.style.top = Math.round(row.top + row.height / 2 - 11) + "px";
+    el.style.left = Math.round(Math.max(6, row.left - 26)) + "px";
+  } else {
+    // Above the header cell, centred on the column it names.
+    el.style.top = Math.round(Math.max(4, rect.top - 24)) + "px";
+    el.style.left = Math.round(rect.left + rect.width / 2 - 11) + "px";
+  }
   el.classList.add("on");
-  for (const other in grips) if (other !== kind) hideGrip(other);
 }
 
+/** The handle beside the row the pointer is over. */
 export function showRowGrip(cell) {
   placeGrip("row", cell);
+}
+
+/** The handle above the column the pointer is over. */
+export function showColGrip(cell) {
+  placeGrip("col", cell);
 }
 
 export function hideRowGrip() {
@@ -424,8 +466,15 @@ export function hideRowGrip() {
   hideGrip("row");
 }
 
-/** Hide the handle, but give the pointer time to travel over to it. */
+export function hideColGrip() {
+  hideGrip("col");
+}
+
+/** Hide the handles, but give the pointer time to travel over to one. */
 export function scheduleGripHide() {
   clearTimeout(hideTimer);
-  hideTimer = setTimeout(() => hideGrip("row"), 180);
+  hideTimer = setTimeout(() => {
+    hideGrip("row");
+    hideGrip("col");
+  }, 180);
 }

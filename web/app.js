@@ -7,6 +7,8 @@ import {
   openCellMenu,
   showRowGrip,
   hideRowGrip,
+  showColGrip,
+  hideColGrip,
   scheduleGripHide,
 } from "./cells.js";
 import { fetchDatabase, renderDatabase } from "./db.js";
@@ -1105,6 +1107,8 @@ function bindEditor() {
     commit: commitBody,
     // Escape in a cell leaves the table and writes under it.
     under: (line) => blocks?.openBlank(line),
+    // Deleting the table leaves the caret where it stood.
+    caretAt: (line) => blocks?.openAtLine(line, 0),
     // Re-render after a row/column change, keeping the reader where they were.
     refresh: () => {
       const y = el.scroller.scrollTop;
@@ -1145,11 +1149,18 @@ function bindEditor() {
   // table whose first row has no handle reads as a table whose menu is broken.
   el.preview.addEventListener("mousemove", (e) => {
     const cell = e.target.closest(".md td[data-line], .md th[data-line]");
-    if (cell) return showRowGrip(cell);
-    scheduleGripHide();
+    if (!cell) return scheduleGripHide();
+    showRowGrip(cell);
+    // A header cell is the column's name, so it carries the column's handle
+    // above it as well as the row handle at its left.
+    if (cell.tagName === "TH") showColGrip(cell);
+    else hideColGrip();
   });
   el.preview.addEventListener("mouseleave", () => scheduleGripHide());
-  el.scroller.addEventListener("scroll", () => hideRowGrip(), { passive: true });
+  el.scroller.addEventListener("scroll", () => {
+    hideRowGrip();
+    hideColGrip();
+  }, { passive: true });
 
   el.preview.addEventListener("click", async (e) => {
     const codeBtn = e.target.closest(".md-code-copy, .md-code-lang");
@@ -1200,7 +1211,8 @@ function bindEditor() {
     // A table cell is the unit of editing inside a table (cells.js); every
     // other block is edited by blocks.js, which listens on the same element.
     const mdCell = e.target.closest(".md td[data-line], .md th[data-line]");
-    if (mdCell) startCellEdit(mdCell, { x: e.clientX, y: e.clientY });
+    // Shift-click marks blocks (blocks.js); it is not a click into a cell.
+    if (mdCell && !e.shiftKey) startCellEdit(mdCell, { x: e.clientX, y: e.clientY });
   });
 }
 

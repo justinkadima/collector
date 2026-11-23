@@ -23,7 +23,7 @@ import (
 )
 
 // Version is the version reported to MCP clients.
-var Version = "0.7.3"
+var Version = "0.7.4"
 
 type server struct {
 	v  *vault.Vault
