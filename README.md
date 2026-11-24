@@ -219,8 +219,14 @@ the tile.
   block — one event, dated that day, its title already selected, so you type
   the name and nothing else. With no page open it opens your "Calendar"
   page, or makes one.
-- Live file watching via SSE: edits from another editor show up without a
-  reload; unsaved changes raise a conflict banner instead of being lost.
+- Live file watching via SSE: an edit from another editor arrives without a
+  reload while you are reading, and as a question — **Reload file** or **Keep my
+  version** — while you are writing. The page is never pulled out from under a
+  caret.
+- **A file rewritten with the bytes it already had is a touch, not a change.**
+  Its stamp moves and the page does not, so the background sync of a vault on
+  iCloud or Dropbox cannot turn into a conflict on the sentence you are in the
+  middle of. Only bytes that differ are news.
 - Light/dark theme, resizable and collapsible sidebar, both remembered.
 - Databases: table, board and list views over a folder of pages (below).
 - **The same vault over MCP**, so an agent can search and edit your notes

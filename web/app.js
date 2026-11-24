@@ -27,6 +27,9 @@ const state = {
   icons: {},
   theme: "light",
   page: null,
+  // What the file holds as far as we know: the last body we read or wrote. A
+  // conflict that finds it unchanged is not a conflict, only a moved stamp.
+  savedBody: "",
   dirty: false,
   saving: false,
   saveAgain: false,
@@ -508,6 +511,7 @@ async function openPage(path, { force = false, line = null } = {}) {
     if (seq !== state.openSeq) return;
     state.page = data.page;
     state.backlinks = data.backlinks || [];
+    state.savedBody = data.page.body; // what the file holds, for proving a conflict
     state.dirty = false;
     state.conflict = false;
     hideBanner();
@@ -537,6 +541,7 @@ async function reloadFromDisk() {
     const data = await api("/api/page?path=" + encodeURIComponent(state.page.path));
     state.page = data.page;
     state.backlinks = data.backlinks || [];
+    state.savedBody = data.page.body;
     state.dirty = false;
     state.conflict = false;
     hideBanner();
@@ -788,7 +793,27 @@ function currentPayload(force) {
   };
 }
 
-async function savePage({ force = false } = {}) {
+/**
+ * Ask the disk whether a conflict is real. It is not, if the file still holds
+ * exactly what we last read or wrote: only the stamp our next write is checked
+ * against has moved, and taking the new one costs nobody anything. Answers true
+ * when it has been settled quietly, false when a person has to decide.
+ */
+async function provedQuiet(path) {
+  if (!state.page || state.page.path !== path) return false;
+  try {
+    const data = await api("/api/page?path=" + encodeURIComponent(path));
+    if (!state.page || state.page.path !== path) return false;
+    if (data.page.body !== state.savedBody) return false;
+    state.page.modTime = data.page.modTime;
+    state.page.size = data.page.size;
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function savePage({ force = false, retried = false } = {}) {
   if (!state.page) return;
   if (state.saving) {
     state.saveAgain = true;
@@ -817,6 +842,7 @@ async function savePage({ force = false } = {}) {
         }
       }
       state.backlinks = res.backlinks || [];
+      state.savedBody = payload.body;
       state.dirty = false;
       state.conflict = false;
       hideBanner();
@@ -834,6 +860,15 @@ async function savePage({ force = false } = {}) {
     }
   } catch (err) {
     if (err instanceof ApiError && err.code === "conflict") {
+      // Not every conflict is one. A file can be rewritten with the bytes it
+      // already had — by a sync client, by an editor that saved nothing — and
+      // then the only thing that moved is the stamp our next write is checked
+      // against. If the file still holds what we last put there, nothing of
+      // anyone's is at stake: take the new stamp and write again.
+      if (!retried && (await provedQuiet(prevPath))) {
+        setTimeout(() => savePage({ retried: true }), 0);
+        return;
+      }
       updateSaveState("conflict");
       showConflict();
     } else {
@@ -2653,6 +2688,7 @@ function connectEvents() {
         return;
       }
       if (data.type === "fs") onExternalChange(data.paths || []);
+      else if (data.type === "touch") onTouched(data.paths || []);
     };
     es.onerror = () => {
       /* EventSource reconnects on its own */
@@ -2664,6 +2700,31 @@ function connectEvents() {
 
 let treeRefreshTimer = 0;
 let dbRefreshTimer = 0;
+let touchRefreshTimer = 0;
+
+/**
+ * A touch is a file rewritten with the bytes it already had: a sync client
+ * re-materialising it, an editor saving a document nobody edited. The page did
+ * not change, so nothing is re-rendered and no caret moves — but the file's
+ * stamp did move, and our next save is checked against that stamp. Take the new
+ * one, so a sync in the background cannot turn into a conflict on the person
+ * who is typing.
+ */
+function onTouched(paths) {
+  const cur = state.page?.path;
+  if (!cur || !paths.includes(cur) || state.conflict) return;
+  clearTimeout(touchRefreshTimer);
+  touchRefreshTimer = setTimeout(async () => {
+    try {
+      const data = await api("/api/page?path=" + encodeURIComponent(cur));
+      if (state.page?.path !== cur || state.conflict) return;
+      state.page.modTime = data.page.modTime;
+      state.page.size = data.page.size;
+    } catch {
+      /* the next save will say what happened */
+    }
+  }, 60);
+}
 function onExternalChange(paths) {
   if (!state.workspace) return;
   refreshCalendar();
@@ -2679,7 +2740,10 @@ function onExternalChange(paths) {
   const cur = state.page?.path;
   if (!cur) return;
   if (paths.includes(cur)) {
-    if (state.dirty) {
+    // A file changing under an open caret is a question, not an order. Reload
+    // would put the reader's sentence on the floor, so ask: the banner keeps
+    // both versions and lets the person decide.
+    if (state.dirty || blocks?.isEditing?.()) {
       updateSaveState("conflict");
       showConflict();
     } else {
@@ -2688,7 +2752,10 @@ function onExternalChange(paths) {
     return;
   }
   if (paths.some((p) => cur.startsWith(p + "/"))) {
-    if (!state.dirty) openPage(cur, { force: true });
+    // A folder changing is not this page changing: something else inside it was
+    // written, or the folder's own stamp moved. The tree is already refreshing;
+    // re-opening the page would throw away a caret, a scroll position and an
+    // editor on the strength of a sibling file.
     return;
   }
   if (state.page && paths.includes(state.page.path)) return;

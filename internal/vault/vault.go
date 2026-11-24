@@ -5,6 +5,8 @@
 package vault
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -56,6 +58,11 @@ type Page struct {
 	Body    string            `json:"body"`
 	Type    string            `json:"type,omitempty"`
 	Props   map[string]string `json:"props,omitempty"`
+	// Hash is the digest of the file's bytes. It exists so that "this file
+	// changed" can mean the bytes changed: a sync client that rewrites a file
+	// it did not edit, or an editor that saves without a keystroke, moves the
+	// timestamp and nothing else.
+	Hash string `json:"-"`
 }
 
 func New(root string) (*Vault, error) {
@@ -221,6 +228,7 @@ func (v *Vault) readLocked(rel string) (Page, error) {
 		Body:    body,
 		Type:    strings.ToLower(meta.Props["type"]),
 		Props:   meta.Props,
+		Hash:    HashBytes(raw),
 	}
 	// Created/Updated travel as nanoseconds (they come from frontmatter), while
 	// ModTime is milliseconds so that the browser can compare it exactly.
@@ -231,6 +239,13 @@ func (v *Vault) readLocked(rel string) (Page, error) {
 		p.Updated = st.ModTime().UnixNano()
 	}
 	return p, nil
+}
+
+// HashBytes digests a file's bytes, so that a file can be asked whether it
+// changed rather than whether it was touched.
+func HashBytes(raw []byte) string {
+	sum := sha256.Sum256(raw)
+	return hex.EncodeToString(sum[:])
 }
 
 type WriteInput struct {

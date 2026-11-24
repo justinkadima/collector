@@ -40,7 +40,7 @@ type Server struct {
 	watchDone chan struct{}
 
 	writtenMu sync.Mutex
-	written   map[string]time.Time
+	written   map[string]writtenFile // what our own writes left on disk
 
 	subsMu sync.Mutex
 	subs   map[chan []byte]struct{}
@@ -57,7 +57,7 @@ func New(store *config.Store, web fs.FS, token string) *Server {
 		store:   store,
 		web:     web,
 		token:   token,
-		written: map[string]time.Time{},
+		written: map[string]writtenFile{},
 		subs:    map[chan []byte]struct{}{},
 	}
 }
@@ -392,6 +392,7 @@ func (s *Server) watchLoop(v *vault.Vault, w *fsnotify.Watcher, done chan struct
 func (s *Server) applyExternalChanges(v *vault.Vault, rels []string) {
 	sort.Strings(rels)
 	changed := make([]string, 0, len(rels))
+	touched := make([]string, 0, 1)
 	s.mu.Lock()
 	ix := s.idx
 	if ix == nil || s.v != v {
@@ -399,7 +400,7 @@ func (s *Server) applyExternalChanges(v *vault.Vault, rels []string) {
 		return
 	}
 	for _, rel := range rels {
-		if s.wroteRecently(rel) {
+		if hiddenRel(rel) {
 			continue
 		}
 		abs, absErr := v.Abs(rel)
@@ -412,18 +413,46 @@ func (s *Server) applyExternalChanges(v *vault.Vault, rels []string) {
 		}
 		switch {
 		case err != nil:
+			if s.wroteRecently(rel) {
+				break
+			}
 			if err := ix.Remove(rel); err == nil {
 				changed = append(changed, rel)
 			}
 		case st.IsDir():
+			if s.wroteRecently(rel) {
+				break
+			}
 			changed = append(changed, rel)
 		case strings.EqualFold(filepath.Ext(rel), ".md"):
-			if p, err := v.Read(rel); err == nil {
-				if err := ix.Upsert(p); err == nil {
-					changed = append(changed, rel)
+			p, rerr := v.Read(rel)
+			if rerr != nil {
+				break
+			}
+			// Our own write is recognised by its bytes: what comes back off the
+			// disk is what we just put there, and the index already has it.
+			if s.wroteThis(rel, p.Hash, p.ModTime) {
+				break
+			}
+			// A sync client re-materialises a file without changing a byte of
+			// it, and an editor can save a document it did not edit: the stamp
+			// moves and the page does not. Take the new stamp, say "touch", and
+			// leave whatever the reader has open exactly where it is.
+			if old, ok, _ := ix.Stamp(rel); ok && old.Hash != "" && old.Hash == p.Hash {
+				if old.ModTime != p.ModTime || old.Size != p.Size {
+					if err := ix.Touch(rel, p.Hash, p.ModTime, p.Size); err == nil {
+						touched = append(touched, rel)
+					}
 				}
+				break
+			}
+			if err := ix.Upsert(p); err == nil {
+				changed = append(changed, rel)
 			}
 		default:
+			if s.wroteRecently(rel) {
+				break
+			}
 			changed = append(changed, rel)
 		}
 	}
@@ -435,9 +464,40 @@ func (s *Server) applyExternalChanges(v *vault.Vault, rels []string) {
 	if len(changed) > 0 {
 		s.broadcast(map[string]any{"type": "fs", "paths": changed})
 	}
+	if len(touched) > 0 {
+		s.broadcast(map[string]any{"type": "touch", "paths": touched})
+	}
+}
+
+// hiddenRel reports paths nobody edits: dotfiles and the temp files a write
+// leaves behind. They are not pages and never worth announcing.
+func hiddenRel(rel string) bool {
+	for _, part := range strings.Split(rel, "/") {
+		if strings.HasPrefix(part, ".") {
+			return true
+		}
+	}
+	return false
+}
+
+// writtenFile is a file this server just wrote: its bytes, its stamp, and when.
+// The bytes make the record exact — a file that still holds what we put there is
+// ours whatever the clock says, and one that holds anything else is news even if
+// it arrived a moment after we saved. The stamp is part of it because an
+// identical rewrite by another writer (a sync client putting the same bytes
+// back) must not be mistaken for ours: its stamp is different, and the reader's
+// editor deserves to be told the file moved.
+type writtenFile struct {
+	hash    string
+	modTime int64
+	size    int64
+	at      time.Time
 }
 
 func (s *Server) markWritten(paths ...string) {
+	s.mu.RLock()
+	v := s.v
+	s.mu.RUnlock()
 	s.writtenMu.Lock()
 	defer s.writtenMu.Unlock()
 	now := time.Now()
@@ -445,29 +505,61 @@ func (s *Server) markWritten(paths ...string) {
 		if p == "" {
 			continue
 		}
-		s.written[p] = now
+		rec := writtenFile{at: now}
+		if v != nil {
+			if abs, err := v.Abs(p); err == nil {
+				if raw, err := os.ReadFile(abs); err == nil {
+					rec.hash = vault.HashBytes(raw)
+					if st, err := os.Stat(abs); err == nil {
+						rec.modTime = st.ModTime().UnixMilli()
+						rec.size = st.Size()
+					}
+				}
+			}
+		}
+		s.written[p] = rec
 		// Writing a page bumps the mtime of its folder, which the watcher
 		// reports as a separate change. Mark the folder too so our own writes
 		// don't come back as an external edit.
 		if dir := path.Dir(p); dir != "." && dir != "/" {
-			s.written[dir] = now
+			if _, ok := s.written[dir]; !ok {
+				s.written[dir] = writtenFile{at: now}
+			}
 		}
 	}
-	for p, t := range s.written {
-		if now.Sub(t) > 10*time.Second {
+	for p, rec := range s.written {
+		if now.Sub(rec.at) > 10*time.Second {
 			delete(s.written, p)
 		}
 	}
 }
 
-func (s *Server) wroteRecently(p string) bool {
+// wroteThis reports whether this is the file we put there ourselves: the same
+// bytes, still carrying the stamp our write gave them.
+func (s *Server) wroteThis(p, hash string, modTime int64) bool {
 	s.writtenMu.Lock()
 	defer s.writtenMu.Unlock()
-	t, ok := s.written[p]
+	rec, ok := s.written[p]
 	if !ok {
 		return false
 	}
-	if time.Since(t) > 1500*time.Millisecond {
+	if rec.hash == "" || rec.hash != hash || rec.modTime != modTime || time.Since(rec.at) > 10*time.Second {
+		return false
+	}
+	delete(s.written, p)
+	return true
+}
+
+// wroteRecently is for paths with no digest of their own: folders and
+// attachments, where a name is all we have.
+func (s *Server) wroteRecently(p string) bool {
+	s.writtenMu.Lock()
+	defer s.writtenMu.Unlock()
+	rec, ok := s.written[p]
+	if !ok {
+		return false
+	}
+	if rec.hash != "" || time.Since(rec.at) > 1500*time.Millisecond {
 		delete(s.written, p)
 		return false
 	}

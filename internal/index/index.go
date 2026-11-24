@@ -71,7 +71,8 @@ func (ix *Index) migrate() error {
 			updated INTEGER NOT NULL DEFAULT 0,
 			modtime INTEGER NOT NULL DEFAULT 0,
 			size INTEGER NOT NULL DEFAULT 0,
-			body TEXT NOT NULL DEFAULT ''
+			body TEXT NOT NULL DEFAULT '',
+			hash TEXT NOT NULL DEFAULT ''
 		)`,
 		`CREATE INDEX IF NOT EXISTS pages_updated ON pages(updated DESC)`,
 		`CREATE VIRTUAL TABLE IF NOT EXISTS pages_fts USING fts5(
@@ -103,6 +104,9 @@ func (ix *Index) migrate() error {
 	// Indexes written before the type column existed: adding it twice fails,
 	// which is exactly the "already there" case.
 	_, _ = ix.db.Exec(`ALTER TABLE pages ADD COLUMN type TEXT NOT NULL DEFAULT ''`)
+	// Same for the file digest, which tells a file that changed from one a sync
+	// client merely rewrote.
+	_, _ = ix.db.Exec(`ALTER TABLE pages ADD COLUMN hash TEXT NOT NULL DEFAULT ''`)
 	return nil
 }
 
@@ -144,12 +148,12 @@ func upsertTx(tx *sql.Tx, p vault.Page) error {
 	if i := strings.LastIndex(p.Path, "/"); i >= 0 {
 		dir = p.Path[:i]
 	}
-	if _, err := tx.Exec(`INSERT INTO pages(path,title,icon,type,dir,created,updated,modtime,size,body)
-		VALUES(?,?,?,?,?,?,?,?,?,?)
+	if _, err := tx.Exec(`INSERT INTO pages(path,title,icon,type,dir,created,updated,modtime,size,body,hash)
+		VALUES(?,?,?,?,?,?,?,?,?,?,?)
 		ON CONFLICT(path) DO UPDATE SET title=excluded.title, icon=excluded.icon, type=excluded.type,
 			dir=excluded.dir, created=excluded.created, updated=excluded.updated,
-			modtime=excluded.modtime, size=excluded.size, body=excluded.body`,
-		p.Path, p.Title, p.Icon, p.Type, dir, p.Created, p.Updated, p.ModTime, p.Size, p.Body); err != nil {
+			modtime=excluded.modtime, size=excluded.size, body=excluded.body, hash=excluded.hash`,
+		p.Path, p.Title, p.Icon, p.Type, dir, p.Created, p.Updated, p.ModTime, p.Size, p.Body, p.Hash); err != nil {
 		return err
 	}
 	if _, err := tx.Exec(`DELETE FROM pages_fts WHERE path=?`, p.Path); err != nil {
@@ -187,6 +191,36 @@ func upsertTx(tx *sql.Tx, p vault.Page) error {
 		}
 	}
 	return nil
+}
+
+// Stamp is the indexed copy of a file's identity: its digest and its
+// timestamps, without the body.
+type Stamp struct {
+	Hash    string
+	ModTime int64
+	Size    int64
+}
+
+// Stamp returns what the index last saw at a path, so a file that changed on
+// disk can be asked whether it changed at all.
+func (ix *Index) Stamp(rel string) (Stamp, bool, error) {
+	var st Stamp
+	err := ix.db.QueryRow(`SELECT hash, modtime, size FROM pages WHERE path=?`, rel).
+		Scan(&st.Hash, &st.ModTime, &st.Size)
+	if err == sql.ErrNoRows {
+		return Stamp{}, false, nil
+	}
+	if err != nil {
+		return Stamp{}, false, err
+	}
+	return st, true, nil
+}
+
+// Touch records a file that was rewritten with the same bytes: the stamp moves,
+// the page does not. Nothing is reindexed and nothing is announced as a change.
+func (ix *Index) Touch(rel string, hash string, modTime, size int64) error {
+	_, err := ix.db.Exec(`UPDATE pages SET hash=?, modtime=?, size=? WHERE path=?`, hash, modTime, size, rel)
+	return err
 }
 
 func (ix *Index) Remove(rel string) error {

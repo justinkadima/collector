@@ -6,6 +6,33 @@ tags; the app prints the same number with `collector -version`.
 Nothing here has ever rewritten a page it wasn't asked to. When a release
 changes the markdown grammar it says so, and the old shape keeps working.
 
+## 0.7.5 — 2026-11-24
+
+**Files:** nothing moves, and no page is rewritten. The index gains a column it
+fills itself.
+
+- Writing was interrupted by the app reloading the page from disk. Every file
+  change was reported to the window as "this page changed", and the window
+  reloaded — losing the block being edited and the caret in it. In a vault that
+  a sync service keeps in step, that is not an occasional event: a file can be
+  rewritten with the bytes it already had, and the reload happened anyway.
+  - **A file is now compared by its bytes, not its timestamp.** If the content
+    did not change, the page did not change: the new stamp is recorded so the
+    next save is not a conflict, and the editor, the caret and the scroll
+    position stay exactly where they were.
+  - **A page is never reloaded while a block is open or a change is unsaved.**
+    A real edit from another program asks first — *Reload file* or *Keep my
+    version* — instead of taking the sentence out of your hands.
+  - **A folder changing is not this page changing.** Something else inside it
+    was written; the tree refreshes and the open page is left alone.
+  - A conflict that turns out not to be one is settled without asking: if the
+    file still holds what we last wrote, only the stamp moved, so the new stamp
+    is taken and the write is repeated.
+- Our own writes were recognised by a one-and-a-half second timer, which also
+  swallowed somebody else's write made in that window. They are now recognised
+  by their bytes and the stamp they were given, so a save by another program
+  is never mistaken for ours.
+
 ## 0.7.4 — 2026-11-23
 
 **Files:** nothing moves.
